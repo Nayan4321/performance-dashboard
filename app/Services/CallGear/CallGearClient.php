@@ -34,16 +34,25 @@ class CallGearClient
 
     public function callsReport(string $from, string $till, int $offset = 0, int $limit = 1000): array
     {
-        return $this->call('get.calls_report', [
-            'date_from' => $from,
-            'date_till' => $till,
-            'offset' => $offset,
-            'limit' => $limit,
-            'fields' => [
-                'id', 'start_time', 'direction', 'finish_reason', 'is_lost', 'contact_phone_number',
-                'virtual_phone_number', 'total_duration', 'wait_duration', 'site_id', 'employees',
-            ],
-        ]);
+        $fields = [
+            'id', 'start_time', 'direction', 'finish_reason', 'is_lost', 'contact_phone_number',
+            'virtual_phone_number', 'total_duration', 'wait_duration', 'site_id', 'employees',
+        ];
+        $params = ['date_from' => $from, 'date_till' => $till, 'offset' => $offset, 'limit' => $limit];
+        // Tags ("Complaint", "Booked"...) when the account's API offers them; remembered for a day if not.
+        if (! \Illuminate\Support\Facades\Cache::get('callgear.no_tags_field')) {
+            try {
+                return $this->call('get.calls_report', $params + ['fields' => [...$fields, 'tags']]);
+            } catch (RuntimeException $e) {
+                // Works without tags? Then tags are what it refused.
+                $rows = $this->call('get.calls_report', $params + ['fields' => $fields]);
+                \Illuminate\Support\Facades\Cache::put('callgear.no_tags_field', true, now()->addDay());
+
+                return $rows;
+            }
+        }
+
+        return $this->call('get.calls_report', $params + ['fields' => $fields]);
     }
 
     public function employees(): array

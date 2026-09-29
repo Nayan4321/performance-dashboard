@@ -198,8 +198,32 @@ class CallGearSource implements PerformanceSource
             'started_at' => $row['start_time'] ?? now(),
             'raw' => $row,
         ])->save();
+        $this->complaintFromTags($call, $row);
 
         return $call;
+    }
+
+    /** A call tagged "Complaint" in CallGear shows up on the Complaints page (once per call). */
+    protected function complaintFromTags(Call $call, array $row): void
+    {
+        $wanted = array_filter(array_map(fn ($t) => mb_strtolower(trim($t)), explode(',', (string) config('callgear.complaint_tags', 'Complaint'))));
+        $tag = collect($row['tags'] ?? [])->first(fn ($t) => is_array($t) && in_array(mb_strtolower(trim((string) ($t['tag_name'] ?? $t['name'] ?? ''))), $wanted, true));
+        if (! $tag || \App\Models\Complaint::where('external_id', 'callgear-'.$call->external_id)->exists()) {
+            return;
+        }
+        $guest = $call->guest ?? \App\Models\Complaint::guestForPhone($call->caller);
+        $who = $tag['tag_user_login'] ?? $tag['tag_user_name'] ?? null;
+        \App\Models\Complaint::create([
+            'call_id' => $call->id,
+            'employee_id' => $call->employee_id,
+            'guest_id' => $guest?->id,
+            'branch_id' => $call->branch_id ?? $guest?->branch_id,
+            'phone' => $call->caller,
+            'message' => 'Tagged "'.($tag['tag_name'] ?? $tag['name']).'" in CallGear'.($who ? " by $who" : '').'. Add what the client said.',
+            'source' => 'callgear',
+            'external_id' => 'callgear-'.$call->external_id,
+            'called_at' => $call->started_at,
+        ]);
     }
 
     public function handleWebhook(WebhookEvent $event): void

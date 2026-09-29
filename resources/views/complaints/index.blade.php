@@ -27,7 +27,7 @@
             <td class="small">{{ $c->employee ? trim($c->employee->first_name.' '.$c->employee->last_name) : '—' }}</td>
             <td class="small text-nowrap">{{ $c->phone ?? '—' }}</td>
             <td class="small">@if($c->guest)@if($c->guest->zenoti_url)<a href="{{ $c->guest->zenoti_url }}" target="_blank" rel="noopener">{{ $c->guest->full_name }}</a>@else{{ $c->guest->full_name }}@endif @else<span class="text-muted">not found</span>@endif</td>
-            <td class="small" style="max-width:340px">@if($c->category)<span class="badge text-bg-light border me-1">Cat. {{ $c->category }}</span>@endif{{ \Illuminate\Support\Str::limit($c->message, 140) }}</td>
+            <td class="small" style="max-width:340px">@if($c->source === 'callgear')<span class="badge text-bg-info me-1">CallGear tag</span>@endif @if($c->category)<span class="badge text-bg-light border me-1">Cat. {{ $c->category }}</span>@endif{{ \Illuminate\Support\Str::limit($c->message, 140) }}</td>
             <td><span class="badge text-bg-{{ $tone }}">{{ \App\Models\Complaint::STATUSES[$c->status] ?? $c->status }}</span></td>
             <td class="text-end"><button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#cp{{ $c->id }}">Details</button></td>
         </tr>
@@ -35,7 +35,10 @@
             <div class="row g-3 py-2">
                 <div class="col-lg-5">
                     <div class="small text-muted mb-1">Complaint</div>
-                    <div class="small" style="white-space:pre-wrap">{{ $c->message }}</div>
+                    <form method="post" action="{{ route('complaints.note', $c) }}">@csrf @method('put')
+                        <textarea name="message" rows="3" class="form-control form-control-sm" maxlength="5000">{{ $c->message }}</textarea>
+                        <button class="btn btn-sm btn-outline-primary mt-1">Save text</button>
+                    </form>
                     <div class="small text-muted mt-2">Logged by {{ $c->creator?->name ?? 'CallGear' }} · {{ $c->created_at->format('j M Y H:i') }}@if($c->branch) · {{ $c->branch->name }}@endif</div>
                     @if($c->call)<div class="small text-muted">Call: {{ $c->call->direction === 'in' ? 'incoming' : ($c->call->direction ?? 'call') }}, {{ $c->call->duration_seconds ? gmdate('i:s', $c->call->duration_seconds) : '—' }} min, to {{ $c->call->callee ?? '—' }}</div>@endif
                     @if($c->resolution)<div class="small mt-2"><strong>Resolution:</strong> <span style="white-space:pre-wrap">{{ $c->resolution }}</span></div>@endif

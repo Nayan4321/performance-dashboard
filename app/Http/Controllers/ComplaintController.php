@@ -110,6 +110,16 @@ class ComplaintController extends Controller
         return back()->with('status', "Complaint {$complaint->number()} updated.");
     }
 
+    /** Agents add the client's words to a complaint (e.g. one imported from a CallGear tag). */
+    public function note(Request $request, Complaint $complaint)
+    {
+        abort_unless(self::canView($request->user()), 403);
+        $data = $request->validate(['message' => 'required|string|max:5000']);
+        $complaint->update(['message' => $data['message']]);
+
+        return back()->with('status', "Complaint {$complaint->number()} updated.");
+    }
+
     public function destroy(Request $request, Complaint $complaint)
     {
         abort_unless($request->user()->can('complaints.manage'), 403);

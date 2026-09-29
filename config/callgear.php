@@ -11,4 +11,6 @@ return [
     // Example to route by the scenario's return codes: {"returned_code": 1}
     'incoming_reply' => env('CALLGEAR_INCOMING_REPLY', ''),
     'lookback_days' => env('CALLGEAR_LOOKBACK_DAYS', 2),
+    // Calls tagged with any of these CallGear tags (comma separated) become complaints.
+    'complaint_tags' => env('CALLGEAR_COMPLAINT_TAGS', 'Complaint'),
 ];

@@ -51,4 +51,45 @@ class ComplaintTest extends TestCase
         $plain->assignRole('employee');
         $this->actingAs($plain)->get(route('complaints.index'))->assertForbidden();
     }
+
+    public function test_calls_tagged_complaint_in_callgear_become_complaints(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+        config(['callgear.enabled' => true, 'callgear.access_token' => 'cg', 'callgear.base_url' => 'https://cg.test/v2.0']);
+        $agent = Employee::create(['source' => 'zenoti', 'first_name' => 'Kawther', 'last_name' => 'A', 'callgear_id' => '55']);
+        \Illuminate\Support\Facades\Http::fake(['cg.test/*' => function ($request) {
+            $rows = $request['params']['offset'] > 0 ? [] : [
+                ['id' => 901, 'start_time' => now()->subHour()->toDateTimeString(), 'contact_phone_number' => '971501234567', 'employees' => [['employee_id' => 55]],
+                    'tags' => [['tag_id' => 1, 'tag_name' => 'Debatable call'], ['tag_id' => 2, 'tag_name' => 'Complaint', 'tag_user_login' => 'kawther']]],
+                ['id' => 902, 'start_time' => now()->subHour()->toDateTimeString(), 'tags' => [['tag_name' => 'Booked']]],
+            ];
+
+            return \Illuminate\Support\Facades\Http::response(['result' => ['data' => in_array('tags', $request['params']['fields'] ?? [], true) ? $rows : []]]);
+        }]);
+
+        $this->artisan('integrations:sync callgear --entity=calls --days=1')->assertSuccessful();
+        $this->artisan('integrations:sync callgear --entity=calls --days=1')->assertSuccessful(); // no duplicate
+
+        $this->assertSame(1, Complaint::count());
+        $c = Complaint::first();
+        $this->assertSame('callgear', $c->source);
+        $this->assertSame($agent->id, $c->employee_id);
+        $this->assertStringContainsString('by kawther', $c->message);
+
+        $admin = User::where('email', 'admin@your-domain.com')->first() ?? User::first();
+        $this->actingAs($admin)->put(route('complaints.note', $c), ['message' => 'Client unhappy with nails'])->assertRedirect();
+        $this->assertSame('Client unhappy with nails', $c->fresh()->message);
+    }
+
+    public function test_calls_still_sync_when_callgear_refuses_the_tags_field(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+        config(['callgear.enabled' => true, 'callgear.access_token' => 'cg', 'callgear.base_url' => 'https://cg.test/v2.0']);
+        \Illuminate\Support\Facades\Http::fake(['cg.test/*' => fn ($request) => in_array('tags', $request['params']['fields'] ?? [], true)
+            ? \Illuminate\Support\Facades\Http::response(['error' => ['code' => -32602, 'message' => 'Invalid params']])
+            : \Illuminate\Support\Facades\Http::response(['result' => ['data' => $request['params']['offset'] > 0 ? [] : [['id' => 903, 'start_time' => now()->toDateTimeString()]]]])]);
+
+        $this->artisan('integrations:sync callgear --entity=calls --days=1')->assertSuccessful();
+        $this->assertTrue(Call::where('external_id', '903')->exists());
+    }
 }
