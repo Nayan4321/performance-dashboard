@@ -22,6 +22,8 @@ class DashboardController extends Controller
         if ($user->can('dashboards.view') && $user->canAccessModule(Module::DASHBOARDS)) {
             $first = Dashboard::visibleTo($user)->first();
             if ($first) {
+                $request->session()->reflash(); // keep a message from the page that sent the user here
+
                 return redirect()->route('dashboards.show', $first);
             }
         }
@@ -35,7 +37,10 @@ class DashboardController extends Controller
     public function show(Request $request, Dashboard $dashboard)
     {
         $user = $request->user();
-        abort_unless($dashboard->isVisibleTo($user), 403);
+        if (! $dashboard->isVisibleTo($user)) {
+            // Old bookmark or a link from someone with more access: go to a dashboard this login can see.
+            return redirect()->route('home')->with('status', "The dashboard \"{$dashboard->name}\" isn't available for your login, so you're on one you can see.");
+        }
 
         $allowed = $user->visibleBranchIds();
         $branches = Branch::where('is_active', true)

@@ -356,7 +356,7 @@ class RizzLayoutTest extends TestCase
         }
 
         $sales = Dashboard::where('name', \Database\Seeders\ManagementDashboardSeeder::NAME)->first()->load('widgets');
-        $this->actingAs($agent)->get(route('dashboards.show', $sales))->assertForbidden();
+        $this->actingAs($agent)->get(route('dashboards.show', $sales))->assertRedirect(route('home'))->assertSessionHas('status');
         $cg = Dashboard::where('name', \Database\Seeders\CallgearPerformanceDashboardSeeder::NAME)->first()->load('widgets');
         $this->actingAs($agent)->get(route('dashboards.show', $cg))->assertOk();
         $this->actingAs($agent)->getJson(route('dashboards.widget-data', [$cg, $cg->widgets->first()]))->assertOk()->assertJsonMissing(['error']);

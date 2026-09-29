@@ -239,7 +239,7 @@ class AppFlowTest extends TestCase
     {
         $d = Dashboard::create(['name' => 'Mgmt only', 'visible_to_roles' => ['management']]);
         $manager = User::where('email', 'andheri@demo.test')->first();
-        $this->actingAs($manager)->get(route('dashboards.show', $d))->assertForbidden();
+        $this->actingAs($manager)->get(route('dashboards.show', $d))->assertRedirect(route('home'));
         $this->actingAs(User::where('email', 'manager@demo.test')->first())->get(route('dashboards.show', $d))->assertOk();
     }
 
