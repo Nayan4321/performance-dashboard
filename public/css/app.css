@@ -1,0 +1,53 @@
+/* Our additions on top of the rizz theme (vendor/rizz). */
+:root {
+    --series-1: #22c55e; --series-2: #08b0e7; --series-3: #fac146; --series-4: #ef4586;
+    --series-5: #6d81f5; --series-6: #1ccab8; --series-7: #ff9f43; --series-8: #95a0c5;
+    --grid: #e9ecef; --text-secondary: #6c757d;
+}
+.min-vw-0 { min-width: 0; }
+
+/* brand: custom logo or app name */
+.startbar .brand .brand-logo-lg { max-height: 36px; max-width: 170px; object-fit: contain; }
+.startbar .brand .brand-logo-sm { height: 38px; width: 38px; object-fit: contain; }
+.startbar .brand .brand-initial { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 10px;
+    background: var(--bs-primary); color: #fff; font-weight: 700; font-size: 18px; }
+.startbar .brand .brand-name { font-weight: 700; font-size: 17px; color: var(--bs-menu-link-color); white-space: nowrap; overflow: hidden; display: inline-block; vertical-align: middle; max-width: 180px; text-overflow: ellipsis; }
+.startbar .brand .logo { display: flex; align-items: center; gap: 4px; text-decoration: none; }
+.auth-logo-img { max-height: 56px; max-width: 220px; object-fit: contain; }
+.auth-header-box .brand-initial { display: inline-flex; align-items: center; justify-content: center; width: 50px; height: 50px; border-radius: 12px; background: var(--bs-primary); color: #fff; font-weight: 700; font-size: 22px; }
+
+/* dashboards */
+.widget-card { height: 100%; }
+.widget-card .card-body { min-height: 120px; }
+.chart-box { position: relative; height: 280px; }
+.kpi-value { font-size: clamp(1.3rem, 2.1vw, 2rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.funnel-row { display: flex; align-items: center; gap: .6rem; margin-bottom: 6px; }
+.funnel-label { width: 90px; font-size: .85rem; color: var(--text-secondary); text-align: right; flex-shrink: 0; }
+.funnel-track { flex: 1; display: flex; justify-content: center; }
+.funnel-bar { height: 28px; border-radius: 4px; background: var(--series-1); min-width: 4px; }
+.funnel-value { width: 90px; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.filter-bar { position: sticky; top: calc(var(--bs-topbar-height) - 20px); z-index: 10; background: var(--bs-body-bg); padding: .5rem 0; }
+.branch-tabs .nav-link { white-space: nowrap; }
+.table td, .table th { vertical-align: middle; }
+.updated-at { font-size: .75rem; color: var(--bs-secondary-color); }
+
+/* rizz-style widgets */
+.stat-icon { width: 54px; height: 54px; font-size: 26px; }
+.stat-trend { font-size: 12px; }
+.stat-value { font-size: clamp(1.05rem, 1.35vw, 1.6rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.spark-box { width: 120px; height: 40px; }
+.apex-box { min-height: 240px; }
+.radial-box { min-height: 200px; }
+.progress-list .progress { height: 5px; }
+.progress-list .item + .item { margin-top: 14px; }
+.border-dashed-bottom { border-bottom: 1px dashed var(--bs-border-color); }
+
+[data-drill] { cursor: pointer; }
+.widget-card.clickable .widget-body { cursor: pointer; }
+#recordsBody table th { position: sticky; top: 0; background: var(--bs-body-bg); z-index: 1; }
+@media print {
+    .filter-bar { position: static; }
+    .widget-card { break-inside: avoid; }
+    .offcanvas, .offcanvas-backdrop { display: none !important; }
+}
+@media print { .topbar, .startbar, .footer, .no-print { display: none !important; } .page-content { margin: 0 !important; } }

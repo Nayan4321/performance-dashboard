@@ -1,0 +1,439 @@
+{
+ "direction": "LR",
+ "steps": [
+  {
+   "id": "start",
+   "label": "Call Incoming",
+   "shape": "start",
+   "group": "dark"
+  },
+  {
+   "id": "greet",
+   "label": "Greeting & Open Zenoti\nClient History",
+   "shape": "box",
+   "group": "intro"
+  },
+  {
+   "id": "router",
+   "label": "Client Conversation\nRouter",
+   "shape": "decision",
+   "group": "intro"
+  },
+  {
+   "id": "small",
+   "label": "Make Small Talk & Relate",
+   "shape": "box",
+   "group": "intro"
+  },
+  {
+   "id": "lanes",
+   "label": "Start Router Node",
+   "shape": "box",
+   "group": "book"
+  },
+  {
+   "id": "bookL",
+   "label": "Bookings Lane",
+   "shape": "rounded",
+   "group": "book"
+  },
+  {
+   "id": "enqL",
+   "label": "Enquiries Lane",
+   "shape": "rounded",
+   "group": "book"
+  },
+  {
+   "id": "compL",
+   "label": "Complaints Lane",
+   "shape": "rounded",
+   "group": "complaint"
+  },
+  {
+   "id": "ccc",
+   "label": "Cancel / Change / Create",
+   "shape": "box",
+   "group": "book"
+  },
+  {
+   "id": "answer",
+   "label": "Provide Answer &\nConvince to Book",
+   "shape": "box",
+   "group": "book"
+  },
+  {
+   "id": "agrees",
+   "label": "Client Agrees?",
+   "shape": "decision",
+   "group": "book"
+  },
+  {
+   "id": "confirm",
+   "label": "Take & Confirm Booking\nin Zenoti",
+   "shape": "box",
+   "group": "book"
+  },
+  {
+   "id": "alt",
+   "label": "Provide Alternative &\nRe-accommodate",
+   "shape": "box",
+   "group": "book"
+  },
+  {
+   "id": "pivot",
+   "label": "Pivot directly to\nReschedule Slot",
+   "shape": "box",
+   "group": "book"
+  },
+  {
+   "id": "end1",
+   "label": "Call End",
+   "shape": "rounded",
+   "group": "endnode"
+  },
+  {
+   "id": "noshow",
+   "label": "No-Show Recovery Engine",
+   "shape": "rounded",
+   "group": "noshow"
+  },
+  {
+   "id": "p1",
+   "label": "Phase 1: Verify\nConfirmation Calls Done",
+   "shape": "box",
+   "group": "noshow"
+  },
+  {
+   "id": "p2",
+   "label": "Phase 2: T + 30 Mins\nFollow-up Nudge",
+   "shape": "decision",
+   "group": "noshow"
+  },
+  {
+   "id": "wa",
+   "label": "Send Automated WhatsApp\nNudge with Reschedule Link",
+   "shape": "box",
+   "group": "noshow"
+  },
+  {
+   "id": "timeCheck",
+   "label": "Check Call Time\nContext",
+   "shape": "decision",
+   "group": "noshow"
+  },
+  {
+   "id": "q3",
+   "label": "Queue Automated Call Task\nfor 3 Hours Later",
+   "shape": "box",
+   "group": "noshow"
+  },
+  {
+   "id": "qm",
+   "label": "Queue Automated Call Task\nfor Next Morning",
+   "shape": "box",
+   "group": "noshow"
+  },
+  {
+   "id": "record",
+   "label": "Record Recovery Outcome\nin Zenoti",
+   "shape": "box",
+   "group": "noshow"
+  },
+  {
+   "id": "end2",
+   "label": "Call End",
+   "shape": "rounded",
+   "group": "endnode"
+  },
+  {
+   "id": "listen",
+   "label": "Listen & Uninterrupted\nNote Taking",
+   "shape": "box",
+   "group": "complaint"
+  },
+  {
+   "id": "repeat",
+   "label": "Repeat Complaint back\nto Client to Verify",
+   "shape": "box",
+   "group": "complaint"
+  },
+  {
+   "id": "matrix",
+   "label": "Validate via\nDiscount Matrix",
+   "shape": "decision",
+   "group": "complaint"
+  },
+  {
+   "id": "l1",
+   "label": "Offer Complimentary\nTreatment Add-on",
+   "shape": "box",
+   "group": "complaint"
+  },
+  {
+   "id": "l2",
+   "label": "Apply 20% Next Visit\nDiscount Voucher",
+   "shape": "box",
+   "group": "complaint"
+  },
+  {
+   "id": "l3",
+   "label": "Escalate to Branch\nManager / Full Refund",
+   "shape": "box",
+   "group": "complaint"
+  },
+  {
+   "id": "logr",
+   "label": "Log Resolution Details\nin Zenoti",
+   "shape": "box",
+   "group": "complaint"
+  },
+  {
+   "id": "end3",
+   "label": "Call End",
+   "shape": "rounded",
+   "group": "endnode"
+  }
+ ],
+ "links": [
+  {
+   "from": "start",
+   "to": "greet",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "greet",
+   "to": "router",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "router",
+   "to": "small",
+   "label": "Talks about self",
+   "dotted": false
+  },
+  {
+   "from": "router",
+   "to": "lanes",
+   "label": "Goes straight to point",
+   "dotted": false
+  },
+  {
+   "from": "small",
+   "to": "lanes",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "lanes",
+   "to": "bookL",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "lanes",
+   "to": "enqL",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "lanes",
+   "to": "compL",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "bookL",
+   "to": "ccc",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "enqL",
+   "to": "answer",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "ccc",
+   "to": "agrees",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "answer",
+   "to": "agrees",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "agrees",
+   "to": "confirm",
+   "label": "Yes",
+   "dotted": false
+  },
+  {
+   "from": "agrees",
+   "to": "alt",
+   "label": "No / Disagree Loop",
+   "dotted": false
+  },
+  {
+   "from": "alt",
+   "to": "pivot",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "pivot",
+   "to": "confirm",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "confirm",
+   "to": "end1",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "alt",
+   "to": "end1",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "bookL",
+   "to": "noshow",
+   "label": "Client Fails to Show Up",
+   "dotted": true
+  },
+  {
+   "from": "enqL",
+   "to": "noshow",
+   "label": "Inquiry Drops Off / No Show",
+   "dotted": true
+  },
+  {
+   "from": "noshow",
+   "to": "p1",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "p1",
+   "to": "p2",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "p2",
+   "to": "pivot",
+   "label": "Client Answers",
+   "dotted": false
+  },
+  {
+   "from": "p2",
+   "to": "wa",
+   "label": "Unanswered",
+   "dotted": false
+  },
+  {
+   "from": "wa",
+   "to": "timeCheck",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "timeCheck",
+   "to": "q3",
+   "label": "Booking time before 5:00 PM",
+   "dotted": false
+  },
+  {
+   "from": "timeCheck",
+   "to": "qm",
+   "label": "Booking time after 5:00 PM",
+   "dotted": false
+  },
+  {
+   "from": "q3",
+   "to": "record",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "qm",
+   "to": "record",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "record",
+   "to": "end2",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "compL",
+   "to": "listen",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "listen",
+   "to": "repeat",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "repeat",
+   "to": "matrix",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "matrix",
+   "to": "l1",
+   "label": "L1: Minor Issue",
+   "dotted": false
+  },
+  {
+   "from": "matrix",
+   "to": "l2",
+   "label": "L2: Medium Issue",
+   "dotted": false
+  },
+  {
+   "from": "matrix",
+   "to": "l3",
+   "label": "L3: Severe Issue",
+   "dotted": false
+  },
+  {
+   "from": "l1",
+   "to": "logr",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "l2",
+   "to": "logr",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "l3",
+   "to": "logr",
+   "label": "",
+   "dotted": false
+  },
+  {
+   "from": "logr",
+   "to": "end3",
+   "label": "",
+   "dotted": false
+  }
+ ]
+}

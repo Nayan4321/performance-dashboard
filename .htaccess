@@ -1,0 +1,6 @@
+# Hostinger shared hosting: if this project folder is your public_html,
+# send every request into Laravel's public/ folder so .env and code stay private.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
