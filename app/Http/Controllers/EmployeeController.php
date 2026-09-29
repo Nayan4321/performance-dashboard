@@ -53,6 +53,27 @@ class EmployeeController extends Controller
         return back()->with('status', 'Target settings saved.');
     }
 
+    /** Link a CallGear agent to this employee by hand (when the names differ too much to match). */
+    public function linkCallgear(Request $request, Employee $employee)
+    {
+        $this->authorizeBranch($request, $employee);
+        $data = $request->validate(['agent_id' => 'nullable|integer']);
+        if (empty($data['agent_id'])) {
+            if ($employee->source !== 'callgear' && $employee->callgear_id) {
+                // Unlink: give the agent its own record again so its calls aren't lost.
+                $agent = Employee::create(['source' => 'callgear', 'first_name' => $employee->first_name, 'last_name' => $employee->last_name, 'callgear_id' => $employee->callgear_id]);
+                \App\Models\Call::where('employee_id', $employee->id)->update(['employee_id' => $agent->id]);
+                $employee->forceFill(['callgear_id' => null])->save();
+            }
+
+            return back()->with('status', 'CallGear agent unlinked.');
+        }
+        $agent = Employee::where('source', 'callgear')->whereNotNull('callgear_id')->findOrFail($data['agent_id']);
+        \App\Services\CallGear\CallGearSource::link($employee, $agent);
+
+        return back()->with('status', "Linked to CallGear agent {$agent->first_name} {$agent->last_name}: their calls now count for {$employee->first_name}.");
+    }
+
     /** Replace one employee's tags with the names typed in (new names become new tags). */
     public function updateTags(Request $request, Employee $employee)
     {

@@ -35,6 +35,24 @@
     }));
     </script>
 </div></div>
+@if($employee->source !== 'callgear')
+@php($agents = \App\Models\Employee::where('source', 'callgear')->whereNotNull('callgear_id')->orderBy('first_name')->get())
+<div class="card mb-4"><div class="card-header"><h4 class="card-title">CallGear agent</h4></div><div class="card-body">
+    @if($employee->callgear_id)
+        <p class="small mb-2">Linked to CallGear agent <strong>#{{ $employee->callgear_id }}</strong>: their calls count for {{ $employee->first_name }}.</p>
+    @else
+        <p class="small text-muted mb-2">Not linked. If {{ $employee->first_name }} takes calls in CallGear under a different name, pick that agent here.</p>
+    @endif
+    <form method="post" action="{{ route('employees.callgear', $employee) }}" class="row g-2 align-items-end">@csrf @method('put')
+        <div class="col-md-8"><select name="agent_id" class="form-select form-select-sm">
+            <option value="">{{ $employee->callgear_id ? 'Unlink' : 'Choose a CallGear agent' }}</option>
+            @foreach($agents as $a)<option value="{{ $a->id }}">{{ trim($a->first_name.' '.$a->last_name) }} (#{{ $a->callgear_id }}, {{ number_format($a->calls()->count()) }} calls)</option>@endforeach
+        </select></div>
+        <div class="col-md-4"><button class="btn btn-sm btn-primary w-100">{{ $employee->callgear_id ? 'Save' : 'Link' }}</button></div>
+    </form>
+    @if($agents->isEmpty() && ! $employee->callgear_id)<div class="small text-muted mt-1">Every CallGear agent is already linked to an employee.</div>@endif
+</div></div>
+@endif
 <div class="card mb-4"><div class="card-header"><h4 class="card-title">Monthly target</h4></div><div class="card-body">
     <form method="post" action="{{ route('employees.target', $employee) }}" class="row g-2 align-items-end">
         @csrf @method('put')

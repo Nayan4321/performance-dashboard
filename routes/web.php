@@ -92,6 +92,7 @@ Route::middleware(['auth', 'active'])->group(function () {
             Route::get('employees/{employee}', [ActivityController::class, 'employee'])->name('employees.show')->middleware('full-data');
             Route::put('employees/{employee}/tags', [EmployeeController::class, 'updateTags'])->name('employees.tags')->middleware('permission:dashboards.manage');
             Route::post('employees/tags', [EmployeeController::class, 'bulkTags'])->name('employees.bulk-tags')->middleware('permission:dashboards.manage');
+            Route::put('employees/{employee}/callgear', [EmployeeController::class, 'linkCallgear'])->name('employees.callgear')->middleware('permission:dashboards.manage');
             Route::put('employees/{employee}/target', [EmployeeController::class, 'updateTarget'])->name('employees.target')->middleware('permission:dashboards.manage');
             Route::get('activity', [ActivityController::class, 'index'])->name('activity.index')->middleware('full-data');
         });

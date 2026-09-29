@@ -76,27 +76,21 @@ class CallGearSource implements PerformanceSource
     protected function syncEmployees(): array
     {
         $counts = ['created' => 0, 'updated' => 0, 'merged' => 0];
-        // Zenoti staff by full name, so a CallGear agent lands on the same person (and their tags).
-        $byName = Employee::where('source', '!=', 'callgear')->get(['id', 'first_name', 'last_name'])
-            ->groupBy(fn ($e) => EmployeeMatcher::key(trim($e->first_name.' '.$e->last_name)))
-            ->filter(fn ($g) => $g->count() === 1)->map(fn ($g) => $g->first()->id);
+        $staff = Employee::where('source', '!=', 'callgear')->with('tags:id,name')->get(['id', 'first_name', 'last_name']);
         foreach ($this->client->employees() as $row) {
             $id = (string) ($row['id'] ?? '');
             if (! $id) {
                 continue;
             }
-            $name = EmployeeMatcher::key(trim(($row['first_name'] ?? '').' '.($row['last_name'] ?? '')) ?: (string) ($row['full_name'] ?? ''));
-            $sameName = $name !== '' ? Employee::find($byName[$name] ?? 0) : null;
-            // Match an existing (e.g. Zenoti) employee by CallGear id, email, then full name so one person has one record.
+            $sameName = self::matchByName(trim(($row['first_name'] ?? '').' '.($row['last_name'] ?? '')) ?: (string) ($row['full_name'] ?? ''), $staff);
+            // Match an existing (e.g. Zenoti) employee by CallGear id, email, then name so one person has one record.
             $employee = Employee::where('callgear_id', $id)->first()
                 ?? (! empty($row['email']) ? Employee::where('email', $row['email'])->first() : null)
                 ?? $sameName
                 ?? new Employee(['source' => 'callgear', 'first_name' => $row['first_name'] ?? $row['full_name'] ?? 'Unknown']);
             // An earlier sync made a separate CallGear-only record: fold it into the Zenoti person.
             if ($employee->exists && $employee->source === 'callgear' && $sameName && $sameName->id !== $employee->id) {
-                Call::where('employee_id', $employee->id)->update(['employee_id' => $sameName->id]);
-                $employee->forceFill(['callgear_id' => null, 'is_active' => false])->save();
-                $employee = $sameName;
+                $employee = self::link($sameName, $employee);
                 $counts['merged']++;
             }
             $counts[$employee->exists ? 'updated' : 'created']++;
@@ -110,9 +104,54 @@ class CallGearSource implements PerformanceSource
         if ($counts['merged']) {
             $counts['message'] = "{$counts['merged']} CallGear agent(s) linked to their Zenoti employee by name.";
         }
+        $unlinked = Employee::where('source', 'callgear')->whereNotNull('callgear_id')->where('is_active', true)->count();
+        if ($unlinked) {
+            $counts['message'] = trim(($counts['message'] ?? '')." $unlinked CallGear agent(s) not matched to a Zenoti employee: link them on the employee's page.");
+        }
         unset($counts['merged']);
 
         return $counts;
+    }
+
+    /**
+     * The one staff member a CallGear agent name belongs to: exact full name, else every word of
+     * the shorter name found in the longer one ("Hadeer Gaber" = "Hadeer Gaber Saad Hassan").
+     * When several fit, only Callgear-tagged staff count. Null unless exactly one fits.
+     */
+    public static function matchByName(string $name, $staff): ?Employee
+    {
+        $words = fn (string $n) => array_values(array_filter(preg_split('/[\s.\-]+/u', mb_strtolower(trim($n))), fn ($w) => mb_strlen($w) > 1));
+        $agent = $words($name);
+        if (! $agent) {
+            return null;
+        }
+        $key = implode(' ', $agent);
+        $exact = $staff->filter(fn ($e) => implode(' ', $words($e->first_name.' '.$e->last_name)) === $key);
+        $fits = $exact->isNotEmpty() ? $exact : $staff->filter(function ($e) use ($words, $agent) {
+            $mine = $words($e->first_name.' '.$e->last_name);
+            [$short, $long] = count($agent) <= count($mine) ? [$agent, $mine] : [$mine, $agent];
+
+            return $short && $short[0] === $long[0] && ! array_diff($short, $long);
+        });
+        if ($fits->count() > 1) {
+            $fits = $fits->filter(fn ($e) => $e->tags->contains(fn ($t) => strcasecmp($t->name, 'callgear') === 0));
+        }
+
+        return $fits->count() === 1 ? $fits->first() : null;
+    }
+
+    /** Make $agent's CallGear id and calls belong to $person; the separate agent record is switched off. */
+    public static function link(Employee $person, Employee $agent): Employee
+    {
+        if ($person->id === $agent->id) {
+            return $person;
+        }
+        Call::where('employee_id', $agent->id)->update(['employee_id' => $person->id]);
+        $callgearId = $agent->callgear_id;
+        $agent->forceFill(['callgear_id' => null, 'is_active' => false])->save();
+        $person->forceFill(['callgear_id' => $callgearId])->save();
+
+        return $person;
     }
 
     protected function syncCalls(): array

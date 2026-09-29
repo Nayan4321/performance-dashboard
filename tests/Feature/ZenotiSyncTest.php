@@ -213,6 +213,35 @@ class ZenotiSyncTest extends TestCase
         $this->actingAs($admin)->post(route('autosync.nudge'))->assertOk();
     }
 
+    public function test_callgear_agents_match_partial_names_and_can_be_linked_by_hand(): void
+    {
+        config(['callgear.enabled' => true, 'callgear.access_token' => 'cg', 'callgear.base_url' => 'https://cg.test/v2.0']);
+        $hadeer = Employee::create(['source' => 'zenoti', 'first_name' => 'Hadeer', 'last_name' => 'Gaber Saad Hassan']);
+        $maria = Employee::create(['source' => 'zenoti', 'first_name' => 'Mahdjouba', 'last_name' => 'Mezeddek']);
+        Http::fake(['cg.test/*' => Http::response(['result' => ['data' => [
+            ['id' => 11, 'first_name' => 'Hadeer', 'last_name' => 'Gaber'],
+            ['id' => 12, 'full_name' => 'Maria CC'],
+        ]]])]);
+        $this->artisan('integrations:sync callgear --entity=employees')->assertSuccessful();
+
+        $this->assertSame('11', $hadeer->fresh()->callgear_id);
+        $this->assertNull($maria->fresh()->callgear_id);
+        $agent = Employee::where('callgear_id', '12')->firstOrFail();
+        $this->assertSame('callgear', $agent->source);
+        \App\Models\Call::create(['external_id' => 'm1', 'employee_id' => $agent->id, 'started_at' => now()]);
+
+        $admin = User::where('email', 'admin@your-domain.com')->first() ?? User::first();
+        $this->actingAs($admin)->get(route('employees.show', $maria))->assertOk()->assertSee('Maria CC');
+        $this->actingAs($admin)->put(route('employees.callgear', $maria), ['agent_id' => $agent->id])->assertRedirect();
+        $this->assertSame('12', $maria->fresh()->callgear_id);
+        $this->assertSame($maria->id, \App\Models\Call::where('external_id', 'm1')->value('employee_id'));
+        $this->assertFalse((bool) $agent->fresh()->is_active);
+
+        // The next sync keeps the hand-made link.
+        $this->artisan('integrations:sync callgear --entity=employees')->assertSuccessful();
+        $this->assertSame('12', $maria->fresh()->callgear_id);
+    }
+
     public function test_sync_now_is_queued_and_run_by_the_scheduler(): void
     {
         Http::fake([
