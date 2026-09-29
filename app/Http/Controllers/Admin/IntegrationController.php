@@ -66,7 +66,7 @@ class IntegrationController extends Controller
     {
         $branches = Branch::whereNotNull('zenoti_center_id')->orderBy('name')->get();
         $input = $request->validate([
-            'call' => 'nullable|in:centers,employees,appointments,sales,guest,path,callgear_employees,callgear_calls,callgear_debug,employee_filter,sales_probe',
+            'call' => 'nullable|in:centers,employees,appointments,sales,guest,path,callgear_employees,callgear_calls,callgear_debug,callgear_tags,employee_filter,sales_probe',
             'center' => 'nullable|string|max:64',
             'date' => 'nullable|date',
             'guest_id' => 'nullable|string|max:64',
@@ -86,6 +86,11 @@ class IntegrationController extends Controller
                     'path' => $client->get(ltrim((string) ($input['path'] ?? ''), '/'), ['center_id' => $center]),
                     'callgear_employees' => $this->callgear()->employees(),
                     'callgear_debug' => $this->callgearDebug(),
+                    // Do complaint marks (tags) and notes come through the Data API? Tries each field on its own.
+                    'callgear_tags' => collect(['tags', 'comments', 'call_records'])->mapWithKeys(fn ($field) => [$field => rescue(fn () => collect($this->callgear()->call('get.calls_report', [
+                        'date_from' => \Carbon\Carbon::parse($date)->startOfDay()->format('Y-m-d H:i:s'), 'date_till' => \Carbon\Carbon::parse($date)->endOfDay()->format('Y-m-d H:i:s'),
+                        'offset' => 0, 'limit' => 500, 'fields' => ['id', 'start_time', 'contact_phone_number', 'employees', $field],
+                    ]))->filter(fn ($r) => ! empty($r[$field]))->take(5)->values()->all() ?: 'field accepted, but no call that day has any', fn ($e) => 'not available: '.mb_substr($e->getMessage(), 0, 200), false)])->all(),
                     'sales_probe' => $this->salesProbe($client, $center === 'all' ? $branches->first()?->zenoti_center_id : $center, $date),
                     'employee_filter' => $this->employeeFilterCheck($client, $center === 'all' ? $branches->first()?->zenoti_center_id : $center, $date),
                     'callgear_calls' => $this->callgear()->callsReport(\Carbon\Carbon::parse($date)->startOfDay()->format('Y-m-d H:i:s'), \Carbon\Carbon::parse($date)->endOfDay()->format('Y-m-d H:i:s'), 0, 20),

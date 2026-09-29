@@ -16,7 +16,9 @@
         ],
         'Call center' => collect(\App\Http\Controllers\GuideController::GUIDES)->map(fn ($g, $slug) => [
             \App\Http\Controllers\GuideController::visibleTo($u), ['guides.show', $slug], $g[1], $g[0], request()->routeIs('guides.show') && request()->route('guide') === $slug,
-        ])->values()->all(),
+        ])->values()->push([
+            \App\Http\Controllers\ComplaintController::canView($u), 'complaints.index', 'iconoir-warning-triangle', 'Complaints', 'complaints.*',
+        ])->all(),
         'Inventory' => [
             [$can('inventory.access') && $u->canAccessModule('inventory'), 'inventory.orders.index', 'iconoir-truck', 'Stock orders', 'inventory.orders.*,inventory.home,inventory.invoices.*'],
             [$can('inventory.access') && $u->canAccessModule('inventory'), 'inventory.stock', 'iconoir-box-iso', 'Stock levels', 'inventory.stock'],

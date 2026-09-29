@@ -29,6 +29,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'inventory.orders.view-all' => 'See orders of every branch',
         'inventory.invoices.generate' => 'Generate and download invoices',
         'guides.manage' => 'Add, edit and remove notes on the Call center guides',
+        'complaints.manage' => 'Follow up complaints: change status, add the resolution, delete',
     ];
 
     public const ROLES = [
@@ -36,7 +37,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'management' => [
             'dashboards.view', 'dashboards.manage', 'performance.view-all-branches', 'performance.view-organization',
             'performance.view-branch', 'integrations.manage', 'leads.manage', 'inventory.access', 'inventory.orders.view-all',
-            'inventory.invoices.generate',
+            'inventory.invoices.generate', 'complaints.manage',
         ],
         'org-admin' => [
             'users.manage', 'dashboards.view', 'performance.view-organization', 'performance.view-branch', 'leads.manage',

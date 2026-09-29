@@ -42,6 +42,11 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware(['auth', 'active'])->group(function () {
+    Route::get('complaints', [\App\Http\Controllers\ComplaintController::class, 'index'])->name('complaints.index');
+    Route::get('complaints/new', [\App\Http\Controllers\ComplaintController::class, 'create'])->name('complaints.create');
+    Route::post('complaints', [\App\Http\Controllers\ComplaintController::class, 'store'])->name('complaints.store');
+    Route::put('complaints/{complaint}', [\App\Http\Controllers\ComplaintController::class, 'update'])->name('complaints.update');
+    Route::delete('complaints/{complaint}', [\App\Http\Controllers\ComplaintController::class, 'destroy'])->name('complaints.destroy');
     Route::post('auto-sync', [\App\Http\Controllers\AutoSyncController::class, 'nudge'])->middleware('throttle:10,1')->name('autosync.nudge');
     Route::post('logout', [AuthController::class, 'logout'])->name('logout');
     Route::get('profile', [ProfileController::class, 'edit'])->name('profile');

@@ -6,7 +6,7 @@
 <p class="small text-muted">Shows exactly what Zenoti sends back (first 3 rows of each list), so we can match field names. Nothing is saved.</p>
 <form class="row g-2 mb-3">
     <div class="col-md-2"><select name="call" class="form-select form-select-sm">
-        @foreach(['appointments' => 'Appointments (7 days from date)', 'sales' => 'Sales (one day)', 'employees' => 'Employees', 'centers' => 'Centers', 'guest' => 'One guest by ID', 'path' => 'Other path', 'callgear_calls' => 'CallGear: calls (one day)', 'callgear_employees' => 'CallGear: employees', 'callgear_debug' => 'CallGear: request details for support', 'employee_filter' => 'Can Zenoti filter by employee? (Callgear tag)', 'sales_probe' => 'Where are all the sales? (7 days)'] as $k => $label)
+        @foreach(['appointments' => 'Appointments (7 days from date)', 'sales' => 'Sales (one day)', 'employees' => 'Employees', 'centers' => 'Centers', 'guest' => 'One guest by ID', 'path' => 'Other path', 'callgear_calls' => 'CallGear: calls (one day)', 'callgear_employees' => 'CallGear: employees', 'callgear_debug' => 'CallGear: request details for support', 'callgear_tags' => 'CallGear: complaint marks and notes (one day)', 'employee_filter' => 'Can Zenoti filter by employee? (Callgear tag)', 'sales_probe' => 'Where are all the sales? (7 days)'] as $k => $label)
             <option value="{{ $k }}" @selected(request('call', 'appointments') === $k)>{{ $label }}</option>
         @endforeach
     </select></div>

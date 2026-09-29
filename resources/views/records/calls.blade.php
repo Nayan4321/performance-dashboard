@@ -7,7 +7,7 @@
 </div>
 @include('records._filters', ['placeholder' => 'Number or guest name'])
 <div class="card"><div class="table-responsive"><table class="table table-hover table-sm mb-0">
-    <thead><tr><th>Time</th><th>Caller</th><th>Guest</th><th>Dialed</th><th>Branch</th><th>Status</th><th class="text-end">Duration</th></tr></thead>
+    <thead><tr><th>Time</th><th>Caller</th><th>Guest</th><th>Dialed</th><th>Branch</th><th>Status</th><th class="text-end">Duration</th><th></th></tr></thead>
     <tbody>
     @forelse($rows as $c)
         <tr>
@@ -18,9 +18,10 @@
             <td>{{ $c->branch?->name ?? '—' }}</td>
             <td><span class="badge text-bg-light border">{{ $c->status }}</span></td>
             <td class="text-end">{{ $c->duration_seconds ? gmdate($c->duration_seconds >= 3600 ? 'H:i:s' : 'i:s', $c->duration_seconds) : '—' }}</td>
+            <td class="text-end">@if(\App\Http\Controllers\ComplaintController::canView(auth()->user()))<a href="{{ route('complaints.create', ['call' => $c->id]) }}" class="btn btn-sm btn-outline-danger py-0" title="Mark this call as a complaint">Complaint</a>@endif</td>
         </tr>
     @empty
-        <tr><td colspan="7" class="text-center text-muted py-4">No calls in this period. Calls appear once CallGear's interactive call processing points at this site (see Admin › Integrations).</td></tr>
+        <tr><td colspan="8" class="text-center text-muted py-4">No calls in this period. Calls appear once CallGear's interactive call processing points at this site (see Admin › Integrations).</td></tr>
     @endforelse
     </tbody>
 </table></div></div>
