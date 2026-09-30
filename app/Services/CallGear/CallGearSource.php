@@ -197,10 +197,21 @@ class CallGearSource implements PerformanceSource
             'wait_seconds' => (int) ($row['wait_duration'] ?? $row['wait_time_duration'] ?? 0),
             'started_at' => $row['start_time'] ?? now(),
             'raw' => $row,
-        ])->save();
+        ])->fill(($tags = self::tagNames($row)) !== null ? ['tags' => $tags] : [])->save();
         $this->complaintFromTags($call, $row);
 
         return $call;
+    }
+
+    /** "Outgoing new sale, Processed" from a report row's tags; null when the row has no tags field. */
+    public static function tagNames(array $row): ?string
+    {
+        if (! array_key_exists('tags', $row) || ! is_array($row['tags'])) {
+            return null;
+        }
+
+        return mb_substr(collect($row['tags'])->map(fn ($t) => is_array($t) ? trim((string) ($t['tag_name'] ?? $t['name'] ?? '')) : trim((string) $t))
+            ->filter()->unique()->implode(', '), 0, 500);
     }
 
     /** A call tagged "Complaint" in CallGear shows up on the Complaints page (once per call). */

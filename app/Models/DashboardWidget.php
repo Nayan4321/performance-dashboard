@@ -28,13 +28,16 @@ class DashboardWidget extends Model
         'employee_table' => 'Employee target table (sales dataset)',
         'agent_table' => 'Call agent scorecard (calls dataset)',
         'agent_bars' => 'Call agents vs daily target chart (calls dataset)',
+        'agent_revenue' => 'Call agents revenue vs team target (sales dataset)',
+        'agent_tags' => 'Call results by CallGear tag per agent (calls dataset)',
+        'agent_commission' => 'Call agents commission tiers (sales dataset)',
     ];
 
     /** Types in the second group of the type picker. */
-    public const RIZZ_TYPES = ['stat', 'sparkline', 'radial', 'area', 'column', 'hbar', 'donut', 'progress', 'branch_table', 'employee_table', 'agent_table', 'agent_bars'];
+    public const RIZZ_TYPES = ['stat', 'sparkline', 'radial', 'area', 'column', 'hbar', 'donut', 'progress', 'branch_table', 'employee_table', 'agent_table', 'agent_bars', 'agent_revenue', 'agent_tags', 'agent_commission'];
 
     /** Types that show one number and ignore "Group by". */
-    public const SINGLE_VALUE = ['kpi', 'stat', 'sparkline', 'radial', 'branch_table', 'employee_table', 'agent_table', 'agent_bars'];
+    public const SINGLE_VALUE = ['kpi', 'stat', 'sparkline', 'radial', 'branch_table', 'employee_table', 'agent_table', 'agent_bars', 'agent_revenue', 'agent_tags', 'agent_commission'];
 
     /** Accent colours for stat cards and gauges (Bootstrap theme names). */
     public const COLORS = ['primary' => 'Green', 'info' => 'Cyan', 'warning' => 'Orange', 'danger' => 'Red', 'secondary' => 'Grey', 'dark' => 'Dark'];

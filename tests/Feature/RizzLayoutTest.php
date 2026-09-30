@@ -361,9 +361,9 @@ class RizzLayoutTest extends TestCase
         $this->actingAs($agent)->get(route('dashboards.show', $cg))->assertOk();
         $this->actingAs($agent)->getJson(route('dashboards.widget-data', [$cg, $cg->widgets->first()]))->assertOk()->assertJsonMissing(['error']);
 
-        // Zenoti booking value of the tagged team is allowed; guest data is not, even on this dashboard.
+        // Zenoti sales of the tagged team is allowed; guest data is not, even on this dashboard.
         $revenue = $cg->widgets->firstWhere('title', \Database\Seeders\CallgearPerformanceDashboardSeeder::REVENUE);
-        $this->assertSame('appointments', $revenue->dataset);
+        $this->assertSame('sales', $revenue->dataset);
         $this->actingAs($agent)->getJson(route('dashboards.widget-data', [$cg, $revenue]))->assertOk()->assertJsonMissing(['error']);
         $guests = $cg->widgets()->create(['title' => 'Guests', 'type' => 'kpi', 'dataset' => 'guests', 'aggregate' => 'count', 'date_range' => 'all_time', 'width' => 3, 'position' => 99]);
         $this->assertFalse($cg->fresh()->isCallgearOnly());
@@ -384,18 +384,12 @@ class RizzLayoutTest extends TestCase
         $cg->widgets()->create(['title' => 'Revenue', 'type' => 'stat', 'dataset' => 'sales', 'aggregate' => 'sum', 'metric_field' => 'net_amount', 'date_range' => 'all_time', 'width' => 12, 'position' => 7, 'options' => ['all_employees' => true]]);
         $this->seed(\Database\Seeders\CallgearPerformanceDashboardSeeder::class);
         $card = $cg->widgets()->where('title', 'Revenue')->sole();
-        $this->assertSame(['hbar', 'employee', 'this_month', 'appointments', 'sum', 'price', 'booked_by'], [$card->type, $card->group_by, $card->date_range, $card->dataset, $card->aggregate, $card->metric_field, $card->option('credit')]);
+        $this->assertSame(['agent_revenue', null, 'this_month', 'sales', 'sum', 'net_amount', 800000], [$card->type, $card->group_by, $card->date_range, $card->dataset, $card->aggregate, $card->metric_field, $card->option('team_target')]);
         $this->assertNull($card->option('all_employees'));
 
-        // Revenue = value of the appointments each agent booked this month, whoever serves them.
-        $agent = \App\Models\Employee::first();
-        $agent->tags()->attach(\App\Models\Tag::idsFor(['Callgear']));
-        $booked = \App\Models\Appointment::where('employee_id', '!=', $agent->id)->limit(3)->pluck('id');
-        \App\Models\Appointment::whereIn('id', $booked)->update(['booked_by_employee_id' => $agent->id, 'booked_at' => now(), 'price' => 120]);
+        // Revenue is split per agent against the team target (details in CallgearTargetsTest).
         $data = $this->actingAs($this->admin())->getJson(route('dashboards.widget-data', [$cg, $card]))->json();
-        $this->assertSame([$agent->full_name], $data['labels']);
-        $expected = 120.0 * $booked->count();
-        $this->assertEquals($expected, $data['values'][0]);
+        $this->assertSame('agent_bars', $data['type']);
     }
 
     public function test_sales_lines_sharing_an_id_are_kept_apart(): void

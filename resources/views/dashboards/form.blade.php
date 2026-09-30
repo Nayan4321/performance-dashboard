@@ -105,6 +105,9 @@ function syncTypeOptions(form) {
     show('.opt-target', type === 'radial' || type === 'branch_table');
     show('.opt-agent', type === 'agent_table' || type === 'agent_bars');
     show('.opt-metric', type === 'agent_bars');
+    show('.opt-revenue', type === 'agent_revenue' || type === 'agent_commission');
+    show('.opt-commission', type === 'agent_commission');
+    show('.opt-tags', type === 'agent_tags');
     const group = form.querySelector('[name=group_by]');
     group.disabled = SINGLE.includes(type) && type !== 'kpi';
 }

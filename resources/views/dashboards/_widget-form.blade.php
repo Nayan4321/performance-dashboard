@@ -42,6 +42,14 @@
                 <input class="form-check-input" type="checkbox" name="options[all_employees]" value="1" id="allEmp{{ $widget->id ?? 'new' }}" @checked($widget->option('all_employees'))>
                 <label class="form-check-label" for="allEmp{{ $widget->id ?? 'new' }}">Count everyone, not only "{{ $dashboard->employee_tag }}"</label></div></div>
             @endif
+            <div class="col-md-3 opt-revenue"><label class="form-label small">Team revenue target (AED)</label>
+                <input type="number" step="any" min="0" name="options[team_target]" class="form-control form-control-sm" value="{{ $widget->option('team_target') }}" placeholder="800000"></div>
+            <div class="col-md-3 opt-revenue"><label class="form-label small">Tag of the team lead (not in the split)</label>
+                <input name="options[lead_tag]" class="form-control form-control-sm" value="{{ $widget->option('lead_tag') }}" placeholder="Team lead"></div>
+            <div class="col-md-6 opt-commission"><label class="form-label small">Commission tiers: team revenue = % (one per line)</label>
+                <textarea name="options[tiers_text]" rows="4" class="form-control form-control-sm" placeholder="700000 = 0.4">{{ collect($widget->option('tiers', [[700000, 0.4], [800000, 0.5], [900000, 0.6], [1000000, 0.7]]))->map(fn ($t) => $t[0].' = '.$t[1])->implode("\n") }}</textarea></div>
+            <div class="col-md-6 opt-tags"><label class="form-label small">Tags to show, comma separated (empty = the 8 most used)</label>
+                <input name="options[tags_text]" class="form-control form-control-sm" value="{{ implode(', ', (array) $widget->option('tags', [])) }}" placeholder="Outgoing refreshment call, Outgoing new sale, Incoming booking call"></div>
             <div class="col-md-3 opt-metric"><label class="form-label small">Chart shows</label>
                 <select name="options[metric]" class="form-select form-select-sm"><option value="calls">Calls per day</option><option value="talk" @selected($widget->option('metric') === 'talk')>Talk minutes per day</option></select></div>
         </div>

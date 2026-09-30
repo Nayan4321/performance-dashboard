@@ -80,6 +80,12 @@ class WidgetQuery
         if ($widget->type === 'agent_table' || $widget->type === 'agent_bars') {
             return $this->agentScores($widget, $ds);
         }
+        if ($widget->type === 'agent_revenue' || $widget->type === 'agent_commission') {
+            return $this->agentRevenue($widget);
+        }
+        if ($widget->type === 'agent_tags') {
+            return $this->agentTags($widget);
+        }
 
         if (in_array($widget->type, ['stat', 'sparkline', 'radial'], true)) {
             return $this->single($widget, $ds, $valueExpr);
@@ -416,6 +422,167 @@ class WidgetQuery
             'keys' => $sorted->pluck('key')->all(),
             'values' => $sorted->pluck($talk ? 'talk_day' : 'calls_day')->all(),
             'percents' => $sorted->pluck($talk ? 'talk_pct' : 'calls_pct')->all(),
+        ];
+    }
+
+    /** Tagged agents the user may see (active, or with data), for the agent widgets. */
+    private function agentEmployees(DashboardWidget $widget, array $withData = [])
+    {
+        $allowed = $this->user->visibleBranchIds();
+        $q = Employee::with('tags')
+            ->when($allowed !== null, fn ($q) => $q->whereIn('branch_id', $allowed ?: [0]))
+            ->when($this->branchId, fn ($q) => $q->where('branch_id', $this->branchId))
+            ->when($this->user->visibleEmployeeId() !== null || $this->employeeId, fn ($q) => $q->whereKey($this->user->visibleEmployeeId() ?? $this->employeeId));
+        $tags = $this->tagIds($widget);
+        foreach ($tags as $tag) {
+            $q->whereHas('tags', fn ($w) => $w->whereKey($tag));
+        }
+
+        return $q->where(fn ($w) => $w->where('is_active', true)->orWhereIn('id', $withData ?: [0]))->get();
+    }
+
+    /**
+     * Agent revenue the way the client's Zenoti Sales-Accrual report counts it: service lines of closed
+     * invoices paid by cash, card or custom-financial, by sale date. A line counts for the agent who
+     * sold it, else the agent who entered it. The team target (option team_target, 800,000) is split
+     * equally between the agents; anyone tagged "Team lead" (option lead_tag) is shown but not in the split.
+     * agent_commission adds the tier the team total reached (option tiers: [[from, percent], ...]).
+     */
+    private function agentRevenue(DashboardWidget $widget): array
+    {
+        [$from, $to] = $this->dateRange($widget->date_range);
+        $agents = $this->agentEmployees($widget);
+        $ids = $agents->pluck('id')->all();
+        $revenue = array_fill_keys($ids, 0.0);
+        \App\Models\Sale::query()
+            ->where(fn ($q) => $q->whereIn('employee_id', $ids ?: [0])->orWhereIn('created_by_employee_id', $ids ?: [0]))
+            ->when($from, fn ($q) => $q->where('sold_at', '>=', $from))
+            ->when($to, fn ($q) => $q->where('sold_at', '<=', $to))
+            ->when($this->user->visibleBranchIds() !== null, fn ($q) => $q->whereIn('branch_id', $this->user->visibleBranchIds() ?: [0]))
+            ->select(['id', 'employee_id', 'created_by_employee_id', 'item_type', 'status', 'net_amount', 'raw'])
+            ->chunkById(1000, function ($lines) use (&$revenue) {
+                foreach ($lines as $line) {
+                    if (! self::countsAsAgentRevenue($line)) {
+                        continue;
+                    }
+                    $who = $line->employee_id !== null && isset($revenue[$line->employee_id]) ? $line->employee_id : $line->created_by_employee_id;
+                    if ($who !== null && isset($revenue[$who])) {
+                        $revenue[$who] += (float) $line->net_amount;
+                    }
+                }
+            });
+
+        $leadTag = mb_strtolower((string) $widget->option('lead_tag', 'Team lead'));
+        $isLead = fn (Employee $e) => $e->tags->contains(fn ($t) => mb_strtolower($t->name) === $leadTag);
+        $ladies = $agents->reject($isLead);
+        $teamTarget = (float) $widget->option('team_target', 800000);
+        $each = $ladies->count() ? round($teamTarget / $ladies->count(), 2) : 0;
+        $total = round(array_sum($revenue), 2);
+        $counted = round($ladies->sum(fn ($e) => $revenue[$e->id]), 2);
+
+        $rows = $agents->map(fn (Employee $e) => [
+            'key' => $e->id,
+            'employee' => $e->full_name.($isLead($e) ? ' (team lead)' : ''),
+            'lead' => $isLead($e),
+            'revenue' => round($revenue[$e->id], 2),
+            'target' => $isLead($e) ? null : $each,
+            'pct' => ! $isLead($e) && $each > 0 ? round($revenue[$e->id] / $each * 100, 1) : null,
+        ])->sortByDesc('revenue')->values();
+
+        $meta = ['team_target' => $teamTarget, 'target_each' => $each, 'agents' => $ladies->count(), 'total' => $total,
+            'team_pct' => $teamTarget > 0 ? round($counted / $teamTarget * 100, 1) : null, 'counted' => $counted];
+
+        if ($widget->type === 'agent_commission') {
+            $tiers = collect($widget->option('tiers', [[700000, 0.4], [800000, 0.5], [900000, 0.6], [1000000, 0.7]]))
+                ->map(fn ($t) => [(float) $t[0], (float) $t[1]])->sortBy(0)->values();
+            $tier = $tiers->filter(fn ($t) => $counted >= $t[0])->last();
+            $next = $tiers->first(fn ($t) => $counted < $t[0]);
+            $rate = $tier[1] ?? 0.0;
+
+            return $meta + [
+                'type' => 'agent_table',
+                'note' => 'Team revenue '.number_format($counted).' AED'.($tier ? ': tier '.number_format($tier[0]).' AED reached, '.$rate.'% commission' : ': no tier reached yet')
+                    .($next ? '. Next tier '.number_format($next[0]).' AED ('.$next[1].'%), '.number_format($next[0] - $counted).' AED to go.' : '.'),
+                'tiers' => $tiers->all(),
+                'rate' => $rate,
+                'columns' => [['employee', 'Agent', 's'], ['revenue', 'Revenue', 'm'], ['target', 'Her target', 'm'], ['pct', '% of target', 'p'], ['commission', 'Commission ('.$rate.'%)', 'm']],
+                'sort' => 'revenue',
+                'rows' => $rows->map(fn ($r) => $r + ['commission' => $r['lead'] ? null : round($r['revenue'] * $rate / 100, 2)])->all(),
+            ];
+        }
+
+        return $meta + [
+            'type' => 'agent_bars',
+            'money' => true,
+            'field' => 'employee',
+            'unit' => 'AED',
+            'days' => null,
+            'summary' => 'Team '.number_format($counted).' of '.number_format($teamTarget).' AED ('.($meta['team_pct'] ?? 0).'%) · target '.number_format($each).' AED each for '.$ladies->count().' agents',
+            'target' => $each,
+            'counts' => ['High' => $rows->where('pct', '>=', 100)->count(), 'On track' => $rows->filter(fn ($r) => $r['pct'] !== null && $r['pct'] >= 80 && $r['pct'] < 100)->count(), 'Low' => $rows->filter(fn ($r) => $r['pct'] !== null && $r['pct'] < 80)->count()],
+            'labels' => $rows->pluck('employee')->all(),
+            'keys' => $rows->pluck('key')->all(),
+            'values' => $rows->pluck('revenue')->all(),
+            'percents' => $rows->map(fn ($r) => $r['pct'] ?? 100)->all(),
+            'lead' => $rows->pluck('lead')->all(),
+        ];
+    }
+
+    /** Sales-Accrual rules: services only, closed invoices, paid by cash, card or custom-financial. */
+    public static function countsAsAgentRevenue(object $line): bool
+    {
+        $type = mb_strtolower((string) $line->item_type);
+        if ($type !== '' && ! is_numeric($type) && ! str_contains($type, 'service')) {
+            return false;
+        }
+        $status = mb_strtolower((string) $line->status);
+        if ($status !== '' && preg_match('/open|void|cancel|refund|delete/', $status)) {
+            return false;
+        }
+        $raw = is_array($line->raw) ? $line->raw : (json_decode((string) $line->raw, true) ?: []);
+        foreach ($raw as $key => $value) {
+            if (is_string($value) && preg_match('/payment/i', (string) $key) && ! preg_match('/date|id$/i', (string) $key)) {
+                $pay = mb_strtolower($value);
+                // Not counted in the report: gift / prepaid cards, packages, memberships, loyalty, cashback, cheques.
+                if (preg_match('/gift|prepaid|package|membership|loyalty|cash ?back|no payment|cheque|check|non[- ]?financial/', $pay)) {
+                    return false;
+                }
+                if ($pay !== '' && ! preg_match('/cash|card|custom[- ]?financial|visa|master|amex/', $pay)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Calls per agent split by the result tag agents put on them in CallGear ("Outgoing new sale",
+     * "Incoming booking call"...). Option tags limits and orders the tags; otherwise the 8 most used.
+     */
+    private function agentTags(DashboardWidget $widget): array
+    {
+        [$from, $to] = $this->dateRange($widget->date_range);
+        $agents = $this->agentEmployees($widget);
+        $calls = DB::table('calls')->whereIn('employee_id', $agents->pluck('id')->all() ?: [0])->whereNotNull('tags')->where('tags', '!=', '')
+            ->when($from, fn ($q) => $q->where('started_at', '>=', $from))
+            ->when($to, fn ($q) => $q->where('started_at', '<=', $to))
+            ->get(['employee_id', 'tags']);
+        $counts = [];
+        foreach ($calls as $c) {
+            foreach (array_filter(array_map('trim', explode(',', $c->tags))) as $tag) {
+                $counts[$tag][$c->employee_id] = ($counts[$tag][$c->employee_id] ?? 0) + 1;
+            }
+        }
+        $wanted = array_filter((array) $widget->option('tags', []));
+        $tags = $wanted ?: collect($counts)->sortByDesc(fn ($byAgent) => array_sum($byAgent))->keys()->take(8)->all();
+        $agents = $agents->sortByDesc(fn ($e) => collect($tags)->sum(fn ($t) => $counts[$t][$e->id] ?? 0))->values();
+
+        return [
+            'type' => 'agent_tags',
+            'labels' => $agents->map(fn ($e) => $e->full_name)->all(),
+            'keys' => $agents->pluck('id')->all(),
+            'series' => collect($tags)->map(fn ($t) => ['name' => $t, 'data' => $agents->map(fn ($e) => $counts[$t][$e->id] ?? 0)->all()])->values()->all(),
         ];
     }
 

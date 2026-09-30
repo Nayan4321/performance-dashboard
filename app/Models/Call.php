@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Call extends Model
 {
     protected $fillable = [
-        'branch_id', 'employee_id', 'guest_id', 'external_id', 'direction', 'status', 'caller', 'callee',
+        'branch_id', 'employee_id', 'guest_id', 'external_id', 'direction', 'status', 'tags', 'caller', 'callee',
         'duration_seconds', 'wait_seconds', 'started_at', 'raw',
     ];
 

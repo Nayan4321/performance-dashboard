@@ -29,7 +29,7 @@
     }
 
     /* ---------- rizz-style elements (ApexCharts) ---------- */
-    const APEX = ['stat', 'sparkline', 'radial', 'area', 'column', 'hbar', 'donut', 'progress', 'branch_table', 'employee_table', 'agent_table', 'agent_bars'];
+    const APEX = ['stat', 'sparkline', 'radial', 'area', 'column', 'hbar', 'donut', 'progress', 'branch_table', 'employee_table', 'agent_table', 'agent_bars', 'agent_tags'];
     const theme = () => document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
     const colorOf = name => css.getPropertyValue('--bs-' + name).trim() || SERIES[0];
     const apexBase = (money) => ({
@@ -93,7 +93,8 @@
                 '<span class="badge bg-success-subtle text-success">High ' + (c.High || 0) + '</span>' +
                 '<span class="badge bg-warning-subtle text-warning">On track ' + (c['On track'] || 0) + '</span>' +
                 '<span class="badge bg-danger-subtle text-danger">Low ' + (c.Low || 0) + '</span>' +
-                '<span class="text-muted ms-auto">Target ' + fmt(target) + ' ' + esc(data.unit || '') + ' · ' + (data.days || 1) + ' day(s)</span></div>';
+                '<span class="text-muted ms-auto">' + (data.summary ? esc(data.summary) : 'Target ' + fmt(target) + ' ' + esc(data.unit || '') + ' · ' + (data.days || 1) + ' day(s)') + '</span></div>';
+            const cash = data.money === true, lead = data.lead || [];
             if (!labels.length) {
                 body.innerHTML = summary + '<div class="text-muted small py-4 text-center">No agents yet. Tag employees on the Employees page, and calls appear once CallGear syncs.</div>';
                 return;
@@ -105,14 +106,39 @@
                 series: [{ name: data.unit || card.dataset.title, data: values }],
                 chart: Object.assign(o.chart, { type: 'bar', height: Math.max(220, labels.length * 32 + 60),
                     events: { dataPointSelection: (e, ctx, cfgp) => drill(card, cfgp.dataPointIndex) } }),
-                colors: [({ dataPointIndex }) => tone(pcts[dataPointIndex] || 0)],
+                colors: [({ dataPointIndex }) => lead[dataPointIndex] ? (colorOf('secondary') || '#888') : tone(pcts[dataPointIndex] || 0)],
                 plotOptions: { bar: { horizontal: true, borderRadius: 4, barHeight: '65%' } },
-                dataLabels: { enabled: true, formatter: (v, o2) => fmt(v) + ' (' + fmt(pcts[o2.dataPointIndex], 'pct') + ')', style: { fontSize: '11px', fontWeight: 500 } },
-                xaxis: { categories: labels, tickAmount: 4, min: 0, max: Math.ceil(Math.max(target * 1.15, ...values.map(Number))) || undefined, labels: { formatter: v => fmt(Math.round(v)) } },
+                dataLabels: { enabled: true, formatter: (v, o2) => fmt(v, cash) + (lead[o2.dataPointIndex] ? '' : ' (' + fmt(pcts[o2.dataPointIndex], 'pct') + ')'), style: { fontSize: '11px', fontWeight: 500 } },
+                tooltip: { theme: theme(), y: { formatter: v => fmt(v, cash) } },
+                xaxis: { categories: labels, tickAmount: 4, min: 0, max: Math.ceil(Math.max(target * 1.15, ...values.map(Number))) || undefined, labels: { formatter: v => cash ? fmt(Math.round(v / 1000)) + 'k' : fmt(Math.round(v)) } },
                 annotations: target ? { xaxis: [{ x: target, borderColor: colorOf('dark') || '#555', strokeDashArray: 4,
-                    label: { text: 'Target ' + fmt(target), orientation: 'horizontal', style: { background: 'transparent', color: INK, fontSize: '11px' } } }] } : {},
+                    label: { text: 'Target ' + fmt(target, cash), orientation: 'horizontal', style: { background: 'transparent', color: INK, fontSize: '11px' } } }] } : {},
                 grid: { strokeDashArray: 3, borderColor: GRID, xaxis: { lines: { show: true } }, yaxis: { lines: { show: false } } },
                 states: { active: { filter: { type: 'none' } } },
+            });
+            charts[id] = new ApexCharts(body.querySelector('.apex-box'), o);
+            charts[id].render();
+            return;
+        }
+
+        if (type === 'agent_tags') {
+            if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+            const labels = data.labels || [], series = data.series || [];
+            if (!labels.length || !series.length) {
+                body.innerHTML = '<div class="text-muted small py-4 text-center">No tagged calls yet. When agents tag calls in CallGear (e.g. "Outgoing new sale"), the results show here.</div>';
+                return;
+            }
+            body.innerHTML = '<div class="apex-box"></div>';
+            const o = apexBase(false);
+            Object.assign(o, {
+                series,
+                chart: Object.assign(o.chart, { type: 'bar', stacked: true, height: Math.max(220, labels.length * 34 + 90) }),
+                colors: SERIES,
+                plotOptions: { bar: { horizontal: true, borderRadius: 3, barHeight: '65%' } },
+                dataLabels: { enabled: true, formatter: v => v ? fmt(v) : '', style: { fontSize: '10px' } },
+                xaxis: { categories: labels, labels: { formatter: v => fmt(Math.round(v)) } },
+                legend: { show: true, position: 'top', horizontalAlign: 'left' },
+                grid: { strokeDashArray: 3, borderColor: GRID, xaxis: { lines: { show: true } }, yaxis: { lines: { show: false } } },
             });
             charts[id] = new ApexCharts(body.querySelector('.apex-box'), o);
             charts[id].render();
@@ -131,7 +157,7 @@
             const cell = (v, f, k) => v === null || v === undefined || v === '' ? '<span class="text-muted">—</span>' : k === 'status' && STATUS[v] ? '<span class="badge bg-' + STATUS[v] + '-subtle text-' + STATUS[v] + '">' + esc(v) + '</span>' : f === 's' ? esc(v) : f === 'm' ? fmt(v, true) : f === 'p' ? fmt(v, 'pct') : f === 'x' ? '× ' + fmt(v, false) : fmt(v, false);
             const tone = (k, r) => (k === 'calls_pct' || k === 'talk_pct') ? ' fw-semibold ' + (r[k] >= 100 ? 'text-success' : r[k] >= 80 ? 'text-warning' : 'text-danger') : (k === 'achievement' || k === 'gap' || k === 'variance') && r.achievement !== null && r.achievement !== undefined
                 ? ' fw-semibold ' + (r.achievement >= 100 ? 'text-success' : r.achievement >= 80 ? 'text-warning' : 'text-danger') : '';
-            body.innerHTML = '<div class="d-flex justify-content-end mb-2 no-print"><button class="btn btn-sm btn-light export-csv"><i class="bi bi-download"></i> Excel (CSV)</button></div>' +
+            body.innerHTML = (data.note ? '<div class="small mb-2 fw-medium">' + esc(data.note) + '</div>' : '') + '<div class="d-flex justify-content-end mb-2 no-print"><button class="btn btn-sm btn-light export-csv"><i class="bi bi-download"></i> Excel (CSV)</button></div>' +
                 '<div class="table-responsive" style="max-height:520px"><table class="table table-sm table-hover mb-0"><thead class="sticky-top bg-body"><tr>' +
                 cols.map(([k, l, f]) => '<th role="button" data-k="' + k + '" class="text-nowrap ' + (f === 's' ? '' : 'text-end') + '">' + l + (sort[0] === k ? (sort[1] > 0 ? ' ▲' : ' ▼') : '') + '</th>').join('') +
                 '</tr></thead><tbody>' + (rows.length ? rows.map(r => '<tr data-row-key="' + esc(r.key ?? '') + '">' + cols.map(([k, , f]) => '<td class="' + (f === 's' ? (k === cols[0][0] ? 'fw-medium' : '') : 'text-end text-nowrap') + tone(k, r) + '">' + cell(r[k], f, k) + '</td>').join('') + '</tr>').join('')
@@ -255,7 +281,8 @@
     function render(card, data) {
         card._data = data;
         const body = card.querySelector('.widget-body');
-        const id = card.dataset.widget, type = card.dataset.type, money = card.dataset.money === '1' ? true : (card.dataset.money === 'pct' ? 'pct' : false);
+        // Revenue and commission widgets draw with the agent chart and table.
+        const id = card.dataset.widget, type = ['agent_revenue', 'agent_commission'].includes(card.dataset.type) && data.type ? data.type : card.dataset.type, money = card.dataset.money === '1' ? true : (card.dataset.money === 'pct' ? 'pct' : false);
         if (data.error) { body.innerHTML = '<div class="text-danger small">' + esc(data.error) + '</div>'; return; }
         if (APEX.includes(type)) {
             if (typeof ApexCharts === 'undefined') { body.innerHTML = '<div class="text-danger small">Chart library failed to load.</div>'; return; }

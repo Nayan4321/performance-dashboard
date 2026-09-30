@@ -32,6 +32,8 @@ class CallgearPerformanceDashboardSeeder extends Seeder
         if ($existing = Dashboard::where('name', self::NAME)->first()) {
             $this->addRevenue($existing);
             $this->addBookings($existing);
+            $this->addAfter($existing, self::REVENUE, self::COMMISSION_SPEC);
+            $this->addAfter($existing, 'Talk minutes per day vs target (120)', self::TAGS_SPEC);
 
             return;
         }
@@ -51,7 +53,9 @@ class CallgearPerformanceDashboardSeeder extends Seeder
             ['Calls per day vs target (100)', 'agent_bars', 'count', null, null, 6, $targets + ['metric' => 'calls'], 'this_month'],
             ['Talk minutes per day vs target (120)', 'agent_bars', 'count', null, null, 6, $targets + ['metric' => 'talk'], 'this_month'],
             ['Agent scorecard (who is high or low)', 'agent_table', 'count', null, null, 12, $targets, 'this_month'],
-            [self::REVENUE, 'hbar', 'sum', 'price', 'employee', 12, self::REVENUE_SPEC['options'], 'this_month', 'appointments'],
+            ['Call results by tag', 'agent_tags', 'count', null, null, 12, [], 'this_month'],
+            [self::REVENUE, 'agent_revenue', 'sum', 'net_amount', null, 12, self::REVENUE_SPEC['options'], 'this_month', 'sales'],
+            [self::COMMISSION_SPEC['title'], 'agent_commission', 'sum', 'net_amount', null, 12, self::COMMISSION_SPEC['options'], 'this_month', 'sales'],
             [self::BOOKINGS, 'hbar', 'count', null, 'employee', 12, self::BOOKINGS_OPTIONS, 'this_month', 'appointments'],
             ['Calls per day', 'area', 'count', null, 'day', 8, ['color' => 'primary'], 'this_month'],
             ['Calls by status', 'donut', 'count', null, 'status', 4, [], 'this_month'],
@@ -66,16 +70,38 @@ class CallgearPerformanceDashboardSeeder extends Seeder
         }
     }
 
-    /** Revenue per agent (one bar each), this month: the value of the appointments they booked. */
-    private const REVENUE_SPEC = ['type' => 'hbar', 'group_by' => 'employee', 'date_range' => 'this_month', 'dataset' => 'appointments', 'aggregate' => 'sum',
-        'metric_field' => 'price', 'options' => ['color' => 'primary', 'credit' => 'booked_by']];
+    /**
+     * Revenue per agent this month as the client's Zenoti Sales-Accrual report counts it (services, closed,
+     * cash / card / custom-financial), against the 800,000 AED team target split between the agents
+     * (the one tagged "Team lead" is not in the split).
+     */
+    private const REVENUE_SPEC = ['type' => 'agent_revenue', 'group_by' => null, 'date_range' => 'this_month', 'dataset' => 'sales', 'aggregate' => 'sum',
+        'metric_field' => 'net_amount', 'options' => ['team_target' => 800000, 'lead_tag' => 'Team lead']];
+
+    /** Commission tier the team total reached (from 700k at 0.4% to 1M at 0.7%), per agent. */
+    private const COMMISSION_SPEC = ['title' => 'Commission', 'type' => 'agent_commission', 'dataset' => 'sales', 'aggregate' => 'sum', 'metric_field' => 'net_amount',
+        'date_range' => 'this_month', 'width' => 12,
+        'options' => ['team_target' => 800000, 'lead_tag' => 'Team lead', 'tiers' => [[700000, 0.4], [800000, 0.5], [900000, 0.6], [1000000, 0.7]]]];
+
+    /** Calls per agent split by the result tag they put on them in CallGear. */
+    private const TAGS_SPEC = ['title' => 'Call results by tag', 'type' => 'agent_tags', 'dataset' => 'calls', 'aggregate' => 'count', 'date_range' => 'this_month', 'width' => 12];
+
+    private function addAfter(Dashboard $d, string $afterTitle, array $spec): void
+    {
+        if ($d->widgets()->where('title', $spec['title'])->exists()) {
+            return;
+        }
+        $after = $d->widgets()->where('title', $afterTitle)->max('position') ?? $d->widgets()->max('position') ?? 0;
+        $d->widgets()->where('position', '>', $after)->increment('position');
+        $d->widgets()->create($spec + ['filters' => [], 'position' => $after + 1]);
+    }
 
     /** Existing dashboards: earlier versions of the revenue widget (per-agent chart, single card) become the per-employee chart. */
     private function addRevenue(Dashboard $d): void
     {
         if ($card = $d->widgets()->where('title', self::REVENUE)->first()) {
-            // Earlier versions summed Zenoti sales; Nayan wants the value of each agent's bookings.
-            if ($card->dataset === 'sales') {
+            // The client counts revenue as in Zenoti's Sales-Accrual report, against the team target.
+            if ($card->type !== 'agent_revenue') {
                 $card->update(self::REVENUE_SPEC);
             }
 

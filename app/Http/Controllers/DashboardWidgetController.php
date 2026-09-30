@@ -59,9 +59,24 @@ class DashboardWidgetController extends Controller
             'options.target_minutes' => 'nullable|numeric|min:1',
             'options.metric' => 'nullable|in:calls,talk',
             'options.all_employees' => 'nullable|boolean',
+            'options.team_target' => 'nullable|numeric|min:0',
+            'options.lead_tag' => 'nullable|string|max:60',
+            'options.tiers_text' => 'nullable|string|max:1000',
+            'options.tags_text' => 'nullable|string|max:1000',
         ]);
+        // "700000 = 0.4" lines become [[700000, 0.4], ...]; tag names become a list.
+        $opts = $data['options'] ?? [];
+        if (filled($opts['tiers_text'] ?? null)) {
+            $opts['tiers'] = collect(preg_split('/\r?\n/', $opts['tiers_text']))
+                ->map(fn ($l) => preg_match('/^\s*([\d,.]+)\s*[=:]\s*([\d.]+)\s*%?\s*$/', $l, $m) ? [(float) str_replace(',', '', $m[1]), (float) $m[2]] : null)
+                ->filter()->sortBy(0)->values()->all() ?: null;
+        }
+        if (array_key_exists('tags_text', $opts)) {
+            $opts['tags'] = array_values(array_filter(array_map('trim', explode(',', (string) $opts['tags_text'])))) ?: null;
+        }
+        $data['options'] = $opts;
         $data['options'] = array_filter(
-            array_intersect_key($data['options'] ?? [], array_flip(['icon', 'color', 'target', 'target_calls', 'target_minutes', 'metric', 'all_employees'])),
+            array_intersect_key($data['options'] ?? [], array_flip(['icon', 'color', 'target', 'target_calls', 'target_minutes', 'metric', 'all_employees', 'team_target', 'lead_tag', 'tiers', 'tags'])),
             fn ($v) => $v !== null && $v !== ''
         ) ?: null;
 

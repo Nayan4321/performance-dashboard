@@ -120,5 +120,5 @@ window.DASHBOARD = {
     currency: @json(config('app.currency_symbol', '₹')),
 };
 </script>
-<script src="{{ asset('js/dashboard.js') }}?v=18"></script>
+<script src="{{ asset('js/dashboard.js') }}?v=19"></script>
 @endpush
