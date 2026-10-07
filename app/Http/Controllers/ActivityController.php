@@ -24,6 +24,7 @@ class ActivityController extends Controller
         $allowed = $user->visibleBranchIds();
         abort_if($allowed !== null && ! in_array($employee->branch_id, $allowed, true), 403);
         abort_if(($own = $user->visibleEmployeeId()) !== null && $own !== $employee->id, 403);
+        abort_if(($team = $user->callgearEmployeeIds()) !== null && ! in_array($employee->id, $team, true), 403);
 
         $from = now()->startOfMonth();
         $appointments = $employee->appointments()->where('start_time', '>=', $from);
@@ -70,6 +71,7 @@ class ActivityController extends Controller
         return ActivityLog::with(['actor', 'employee', 'branch'])
             ->when($allowed !== null, fn ($q) => $q->whereIn('branch_id', $allowed ?: [0]))
             ->when($own !== null, fn ($q) => $q->where(fn ($w) => $w->where('actor_employee_id', $own)->orWhere('employee_id', $own)))
+            ->when($user->callgearEmployeeIds(), fn ($q, $ids) => $q->where(fn ($w) => $w->whereIn('actor_employee_id', $ids)->orWhereIn('employee_id', $ids)))
             ->when($request->integer('branch_id'), fn ($q, $b) => $q->where('branch_id', $b))
             ->when($request->action, fn ($q, $a) => $q->where('action', $a))
             ->when($request->q, fn ($q, $s) => $q->where('subject_label', 'like', "%$s%"))

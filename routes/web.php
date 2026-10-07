@@ -89,21 +89,21 @@ Route::middleware(['auth', 'active'])->group(function () {
     });
 
     Route::middleware('module:performance')->group(function () {
-        Route::get('employees', [EmployeeController::class, 'index'])->name('employees.index')->middleware('permission:dashboards.view')->middleware('full-data');
+        Route::get('employees', [EmployeeController::class, 'index'])->name('employees.index')->middleware('permission:dashboards.view');
         Route::middleware('permission:dashboards.view')->group(function () {
-            Route::get('guests', [RecordsController::class, 'guests'])->name('guests.index')->middleware('full-data');
-            Route::get('appointments', [RecordsController::class, 'appointments'])->name('appointments.index')->middleware('full-data');
-            Route::get('sales', [RecordsController::class, 'sales'])->name('sales.index')->middleware('full-data');
-            Route::get('invoices', [RecordsController::class, 'invoices'])->name('invoices.index')->middleware('full-data');
+            Route::get('guests', [RecordsController::class, 'guests'])->name('guests.index');
+            Route::get('appointments', [RecordsController::class, 'appointments'])->name('appointments.index');
+            Route::get('sales', [RecordsController::class, 'sales'])->name('sales.index');
+            Route::get('invoices', [RecordsController::class, 'invoices'])->name('invoices.index');
             Route::get('calls', [RecordsController::class, 'calls'])->name('calls.index');
-            Route::get('employees/{employee}', [ActivityController::class, 'employee'])->name('employees.show')->middleware('full-data');
+            Route::get('employees/{employee}', [ActivityController::class, 'employee'])->name('employees.show');
             Route::put('employees/{employee}/tags', [EmployeeController::class, 'updateTags'])->name('employees.tags')->middleware('permission:dashboards.manage');
             Route::post('employees/tags', [EmployeeController::class, 'bulkTags'])->name('employees.bulk-tags')->middleware('permission:dashboards.manage');
             Route::put('employees/{employee}/callgear', [EmployeeController::class, 'linkCallgear'])->name('employees.callgear')->middleware('permission:dashboards.manage');
             Route::put('employees/{employee}/target', [EmployeeController::class, 'updateTarget'])->name('employees.target')->middleware('permission:dashboards.manage');
-            Route::get('activity', [ActivityController::class, 'index'])->name('activity.index')->middleware('full-data');
+            Route::get('activity', [ActivityController::class, 'index'])->name('activity.index');
         });
-        Route::resource('leads', LeadController::class)->except(['show'])->middleware('permission:leads.manage')->middleware('full-data');
+        Route::resource('leads', LeadController::class)->except(['show'])->middleware('permission:leads.manage');
     });
 
     // ---------------------------------------------------------------- administration

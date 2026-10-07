@@ -16,6 +16,9 @@ class RecordsController extends Controller
     {
         [$from, $to] = $this->period($request);
         $query = $this->scoped(Guest::query(), $request, false)
+            ->when($request->user()->callgearEmployeeIds(), fn ($q, $ids) => $q->where(fn ($w) => $w
+                ->whereHas('appointments', fn ($a) => $a->whereIn('booked_by_employee_id', $ids)->orWhereIn('employee_id', $ids))
+                ->orWhereIn('id', Sale::whereIn('created_by_employee_id', $ids)->whereNotNull('guest_id')->select('guest_id'))))
             ->when($request->q, fn ($q, $s) => $q->where(fn ($w) => $w->where('first_name', 'like', "%$s%")->orWhere('last_name', 'like', "%$s%")
                 ->orWhere('email', 'like', "%$s%")->orWhere('phone', 'like', "%$s%")))
             ->when($request->period !== 'all', fn ($q) => $q->whereBetween('registered_at', [$from, $to]));
@@ -32,6 +35,7 @@ class RecordsController extends Controller
     {
         [$from, $to] = $this->period($request);
         $base = $this->scoped(Appointment::query(), $request)
+            ->when($request->user()->callgearEmployeeIds(), fn ($q, $ids) => $q->where(fn ($w) => $w->whereIn('booked_by_employee_id', $ids)->orWhereIn('employee_id', $ids)))
             ->whereBetween('start_time', [$from, $to])
             ->when($request->q, fn ($q, $s) => $q->where(fn ($w) => $w->where('service_name', 'like', "%$s%")
                 ->orWhereHas('guest', fn ($g) => $g->where('first_name', 'like', "%$s%")->orWhere('last_name', 'like', "%$s%")->orWhere('phone', 'like', "%$s%"))));
@@ -52,6 +56,7 @@ class RecordsController extends Controller
     {
         [$from, $to] = $this->period($request);
         $base = $this->scoped(Sale::query(), $request)
+            ->when($request->user()->callgearEmployeeIds(), fn ($q, $ids) => $q->where(fn ($w) => $w->whereIn('created_by_employee_id', $ids)->orWhereIn('employee_id', $ids)))
             ->whereBetween('sold_at', [$from, $to])
             ->when($request->q, fn ($q, $s) => $q->where(fn ($w) => $w->where('item_name', 'like', "%$s%")->orWhere('invoice_no', 'like', "%$s%")));
 
@@ -75,6 +80,7 @@ class RecordsController extends Controller
         $base = $this->scoped(Sale::query(), $request, false)->whereNotNull('invoice_no')->where('invoice_no', '!=', '')
             ->whereBetween('sold_at', [$from, $to])
             ->when($own !== null, fn ($q) => $q->where(fn ($w) => $w->where('employee_id', $own)->orWhere('created_by_employee_id', $own)))
+            ->when($request->user()->callgearEmployeeIds(), fn ($q, $ids) => $q->where(fn ($w) => $w->whereIn('created_by_employee_id', $ids)->orWhereIn('employee_id', $ids)))
             ->when($request->q, fn ($q, $s) => $q->where('invoice_no', 'like', "%$s%"));
 
         $invoices = (clone $base)->selectRaw('invoice_no, branch_id, min(sold_at) as first_at, count(*) as line_count, sum(net_amount) as net')
@@ -108,6 +114,7 @@ class RecordsController extends Controller
     {
         [$from, $to] = $this->period($request);
         $base = $this->scoped(\App\Models\Call::query(), $request)
+            ->when($request->user()->callgearEmployeeIds(), fn ($q, $ids) => $q->whereIn('employee_id', $ids))
             ->whereBetween('started_at', [$from, $to])
             ->when($request->q, fn ($q, $s) => $q->where(fn ($w) => $w->where('caller', 'like', "%$s%")->orWhere('callee', 'like', "%$s%")
                 ->orWhereHas('guest', fn ($g) => $g->where('first_name', 'like', "%$s%")->orWhere('last_name', 'like', "%$s%"))));

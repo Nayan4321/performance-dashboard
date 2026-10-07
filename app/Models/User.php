@@ -94,6 +94,22 @@ class User extends Authenticatable
         return ! $this->seesEverything() && $this->hasRole(self::CALLGEAR_ADMIN) && ! $this->hasAnyRole([self::MAIN_ADMIN, 'org-admin']);
     }
 
+    /**
+     * Callgear staff see the Zenoti pages only for entries made by Callgear employees:
+     * an agent her own, a Callgear admin every Callgear-tagged employee. null = no such limit.
+     */
+    public function callgearEmployeeIds(): ?array
+    {
+        if (! $this->callgearOnly()) {
+            return null;
+        }
+        if ($this->hasRole(self::CALLGEAR_ADMIN)) {
+            return Employee::callgearIds() ?: [0];
+        }
+
+        return [$this->employee?->id ?? 0];
+    }
+
     /** Roles with "callgear.only" see CallGear dashboards and calls, and nothing from Zenoti. */
     public function callgearOnly(): bool
     {

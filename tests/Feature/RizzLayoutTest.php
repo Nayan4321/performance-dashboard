@@ -348,12 +348,38 @@ class RizzLayoutTest extends TestCase
         $visible = Dashboard::visibleTo($agent)->pluck('name')->all();
         $this->assertSame([\Database\Seeders\CallgearPerformanceDashboardSeeder::NAME], $visible);
         $this->actingAs($agent)->get(route('home'))->assertRedirect();
-        $html = $this->actingAs($agent)->get(route('calls.index'))->assertOk()->getContent();
-        $this->assertStringNotContainsString(route('sales.index'), $html);
-        $this->assertStringNotContainsString('Search guests', $html);
-        foreach (['sales.index', 'guests.index', 'appointments.index', 'employees.index', 'activity.index'] as $r) {
-            $this->actingAs($agent)->get(route($r))->assertForbidden();
+        $this->actingAs($agent)->get(route('calls.index'))->assertOk()->assertSee(route('sales.index'));
+
+        // Zenoti pages are open to Callgear staff, limited to entries made by Callgear employees:
+        // an agent sees her own, a Callgear admin the whole tagged team.
+        $branch = \App\Models\Branch::first();
+        $mine = \App\Models\Employee::create(['source' => 'zenoti', 'first_name' => 'Mine', 'last_name' => 'Agent']);
+        $mate = \App\Models\Employee::create(['source' => 'zenoti', 'first_name' => 'Mate', 'last_name' => 'Agent']);
+        $other = \App\Models\Employee::create(['source' => 'zenoti', 'first_name' => 'Therapist', 'last_name' => 'Elsewhere']);
+        $tag = \App\Models\Tag::idsFor(['Callgear']);
+        $mine->tags()->sync($tag);
+        $mate->tags()->sync($tag);
+        $mine->update(['user_id' => $agent->id]);
+        foreach ([['INV-MINE', $mine], ['INV-MATE', $mate], ['INV-OTHER', $other]] as [$no, $e]) {
+            \App\Models\Sale::create(['branch_id' => $branch?->id, 'zenoti_id' => $no, 'invoice_no' => $no, 'item_name' => 'Facial', 'net_amount' => 10, 'sold_at' => now(), 'created_by_employee_id' => $e->id]);
         }
+        $agent->refresh();
+        foreach (['sales.index', 'invoices.index', 'guests.index', 'appointments.index', 'employees.index', 'activity.index', 'leads.index'] as $r) {
+            $this->actingAs($agent)->get(route($r))->assertOk();
+        }
+        $this->actingAs($agent)->get(route('invoices.index'))->assertSee('INV-MINE')->assertDontSee('INV-MATE')->assertDontSee('INV-OTHER');
+        $this->actingAs($agent)->get(route('employees.show', $mate))->assertForbidden();
+
+        $lead = User::create(['name' => 'Lead', 'email' => 'cglead@x.test', 'password' => 'password']);
+        $lead->assignRole('callgear-admin');
+        $this->actingAs($lead)->get(route('invoices.index'))->assertSee('INV-MINE')->assertSee('INV-MATE')->assertDontSee('INV-OTHER');
+        $this->actingAs($lead)->get(route('employees.index'))->assertSee('Mate')->assertDontSee('Therapist');
+
+        // Her bell gets cancellations and deletions by her team, not by others.
+        \App\Services\Activity\ActivityRecorder::record(['action' => 'cancelled', 'actor_employee_id' => $mate->id, 'branch_id' => $branch?->id, 'subject_label' => 'Facial', 'subject_type' => 'appointment']);
+        \App\Services\Activity\ActivityRecorder::record(['action' => 'cancelled', 'actor_employee_id' => $other->id, 'branch_id' => $branch?->id, 'subject_label' => 'Facial', 'subject_type' => 'appointment']);
+        $this->assertSame(1, $lead->notifications()->count());
+        $this->assertSame(0, $agent->notifications()->count());
 
         $sales = Dashboard::where('name', \Database\Seeders\ManagementDashboardSeeder::NAME)->first()->load('widgets');
         $this->actingAs($agent)->get(route('dashboards.show', $sales))->assertRedirect(route('home'))->assertSessionHas('status');

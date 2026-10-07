@@ -16,6 +16,7 @@ class LeadController extends Controller
         $allowed = $request->user()->visibleBranchIds();
         $leads = Lead::with(['branch', 'employee'])
             ->when($allowed !== null, fn ($q) => $q->whereIn('branch_id', $allowed ?: [0]))
+            ->when($request->user()->callgearEmployeeIds(), fn ($q, $ids) => $q->whereIn('employee_id', $ids))
             ->when($request->stage, fn ($q, $s) => $q->where('stage', $s))
             ->when($request->source, fn ($q, $s) => $q->where('source', $s))
             ->when($request->integer('branch_id'), fn ($q, $b) => $q->where('branch_id', $b))
@@ -66,6 +67,8 @@ class LeadController extends Controller
     {
         $allowed = $request->user()->visibleBranchIds();
         abort_unless($allowed === null || in_array($lead->branch_id, $allowed, true), 403);
+        $team = $request->user()->callgearEmployeeIds();
+        abort_unless($team === null || in_array($lead->employee_id, $team, true), 403);
     }
 
     private function options(Request $request): array
@@ -74,7 +77,8 @@ class LeadController extends Controller
 
         return [
             'branches' => Branch::when($allowed !== null, fn ($q) => $q->whereIn('id', $allowed ?: [0]))->orderBy('name')->get(),
-            'employees' => Employee::where('is_active', true)->when($allowed !== null, fn ($q) => $q->whereIn('branch_id', $allowed ?: [0]))->orderBy('first_name')->get(),
+            'employees' => Employee::where('is_active', true)->when($allowed !== null, fn ($q) => $q->whereIn('branch_id', $allowed ?: [0]))
+                ->when($request->user()->callgearEmployeeIds(), fn ($q, $ids) => $q->whereKey($ids))->orderBy('first_name')->get(),
             'stages' => Lead::STAGES,
         ];
     }
@@ -83,13 +87,18 @@ class LeadController extends Controller
     {
         $allowed = $request->user()->visibleBranchIds();
 
+        $team = $request->user()->callgearEmployeeIds();
+        if ($team !== null && count($team) === 1) {
+            $request->merge(['employee_id' => $team[0]]); // an agent's leads are always her own
+        }
+
         return $request->validate([
             'name' => 'required|string|max:120',
             'phone' => 'nullable|string|max:40',
             'email' => 'nullable|email|max:120',
             'channel' => 'nullable|string|max:60',
             'branch_id' => ['required', 'exists:branches,id', $allowed !== null ? Rule::in($allowed) : 'integer'],
-            'employee_id' => 'nullable|exists:employees,id',
+            'employee_id' => $team !== null ? ['required', Rule::in($team)] : 'nullable|exists:employees,id',
             'stage' => ['required', Rule::in(Lead::STAGES)],
             'value' => 'nullable|numeric|min:0',
             'lead_at' => 'required|date',

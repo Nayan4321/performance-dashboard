@@ -46,6 +46,12 @@ class Employee extends Model
         return $this->belongsTo(User::class);
     }
 
+    /** Ids of employees tagged "Callgear" (the call-center team). */
+    public static function callgearIds(): array
+    {
+        return static::whereHas('tags', fn ($t) => $t->whereRaw('LOWER(name) = ?', ['callgear']))->pluck('id')->all();
+    }
+
     public function tags(): BelongsToMany
     {
         return $this->belongsToMany(Tag::class)->orderBy('name');

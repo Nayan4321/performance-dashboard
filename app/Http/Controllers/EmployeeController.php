@@ -20,6 +20,7 @@ class EmployeeController extends Controller
         $employees = Employee::with(['branch', 'user.roles', 'tags'])
             ->when($allowed !== null, fn ($q) => $q->whereIn('branch_id', $allowed ?: [0]))
             ->when($own !== null, fn ($q) => $q->whereKey($own))
+            ->when($user->callgearEmployeeIds(), fn ($q, $ids) => $q->whereKey($ids))
             ->when($request->integer('branch_id'), fn ($q, $b) => $q->where('branch_id', $b))
             ->when($request->integer('tag_id'), fn ($q, $t) => $q->whereHas('tags', fn ($w) => $w->whereKey($t)))
             ->when($request->q, fn ($q, $s) => $q->where(fn ($w) => $w->where('first_name', 'like', "%$s%")->orWhere('last_name', 'like', "%$s%")->orWhere('email', 'like', "%$s%")))
