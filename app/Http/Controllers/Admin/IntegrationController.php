@@ -61,6 +61,40 @@ class IntegrationController extends Controller
         ]);
     }
 
+    /**
+     * The sales lines we actually sync (the accrual report), for one day: every field name the rows
+     * carry, the payment-related fields with their values, and how each sample line is counted for
+     * call agents, so totals can be compared with the client's Zenoti export.
+     */
+    private function salesSample(\App\Services\Zenoti\ZenotiClient $client, ?string $center, string $date): array
+    {
+        $rows = config('zenoti.sales_source') === 'accrual'
+            ? $client->salesAccrual((string) $center, $date, $date)
+            : $client->sales((string) $center, $date, \Carbon\Carbon::parse($date)->addDay()->toDateString());
+        $keys = collect($rows)->flatMap(fn ($r) => array_keys(\Illuminate\Support\Arr::dot($r)))->unique()->sort()->values();
+        $money = $keys->filter(fn ($k) => preg_match('/pay|cash|card|custom|collect|amount|sale|price|total|tax|discount|redeem|gift|prepaid|package|member/i', $k))->values();
+        $lines = collect($rows)->map(function ($r) use ($money) {
+            $m = \App\Services\Zenoti\ZenotiMapper::sale($r);
+            $line = (object) ['raw' => $r, 'net_amount' => $m['net_amount'], 'item_type' => $m['item_type'], 'status' => $m['status']];
+            [$amount, $from] = \App\Support\WidgetQuery::agentRevenueAmount($line);
+
+            return ['invoice' => $m['invoice_no'], 'item' => $m['item_name'], 'item_type' => $m['item_type'], 'status' => $m['status'],
+                'created_by' => $r['created_by'] ?? data_get($r, 'created_by.name') ?? $r['created_by_name'] ?? null, 'sold_by' => $r['sold_by'] ?? data_get($r, 'sold_by.name') ?? null,
+                'net_amount_used' => $m['net_amount'], 'agent_revenue' => \App\Support\WidgetQuery::agentRevenueExclusion($line) === null ? $amount : 0, 'amount_from' => $from,
+                'why_not_counted' => \App\Support\WidgetQuery::agentRevenueExclusion($line),
+                'money_fields' => collect(\Illuminate\Support\Arr::dot($r))->only($money->all())->all()];
+        });
+
+        return [
+            'source' => config('zenoti.sales_source') === 'accrual' ? 'reports/sales/accrual_basis/flat_file' : 'sales report',
+            'date' => $date,
+            'rows' => count($rows),
+            'counted_for_agents_total' => round($lines->sum('agent_revenue'), 2),
+            'all_fields' => $keys->all(),
+            'lines' => $lines->take(15)->values()->all(),
+        ];
+    }
+
     /** "Test a Zenoti call": shows the raw reply so field names can be checked without SSH. */
     public function test(Request $request, \App\Services\Zenoti\ZenotiClient $client)
     {
@@ -81,7 +115,7 @@ class IntegrationController extends Controller
                     'centers' => $client->get($client->endpoint('centers'), ['page' => 1, 'size' => 3]),
                     'employees' => $client->get($client->endpoint('employees', ['center_id' => $center]), ['page' => 1, 'size' => 3]),
                     'appointments' => $this->appointmentsByBranch($client, $branches, $center, $date),
-                    'sales' => ['rows' => count($s = $client->sales($center, $date, \Carbon\Carbon::parse($date)->addDay()->toDateString())), 'sample_rows' => array_slice($s, 0, 2)],
+                    'sales' => $this->salesSample($client, $center === 'all' ? $branches->first()?->zenoti_center_id : $center, $date),
                     'guest' => $client->get($client->endpoint('guest', ['guest_id' => $input['guest_id'] ?? ''])),
                     'path' => $client->get(ltrim((string) ($input['path'] ?? ''), '/'), ['center_id' => $center]),
                     'callgear_employees' => $this->callgear()->employees(),

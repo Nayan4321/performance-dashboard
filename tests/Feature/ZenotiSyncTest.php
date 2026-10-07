@@ -512,6 +512,21 @@ class ZenotiSyncTest extends TestCase
             ->assertOk()->assertSee('"rows": 2')->assertSee('"rows_naming_callgear_staff": 1')->assertSee('sold_by');
     }
 
+    public function test_sales_check_shows_accrual_lines_and_how_agent_revenue_counts_them(): void
+    {
+        config(['zenoti.sales_source' => 'accrual']);
+        $org = \App\Models\Organization::firstOrCreate(['name' => 'GF']);
+        Branch::create(['organization_id' => $org->id, 'name' => 'Juhu', 'zenoti_center_id' => 'c1']);
+        Http::fake(['*accrual_basis*' => Http::sequence()
+            ->push(['sales' => [
+                ['invoice_no' => 'I1', 'item_type' => 'Service', 'sales_exc_tax' => 100, 'cash' => 60, 'gift_card' => 40, 'created_by' => 'Mary'],
+                ['invoice_no' => 'I2', 'item_type' => 'Product', 'sales_exc_tax' => 50],
+            ], 'total' => 2])->whenEmpty(Http::response(['sales' => []])), '*' => Http::response([])]);
+        $admin = User::role('super-admin')->first();
+        $this->actingAs($admin)->get(route('admin.integrations.test', ['call' => 'sales', 'center' => 'c1']))
+            ->assertOk()->assertSee('"counted_for_agents_total": 60')->assertSee('"amount_from": "cash"')->assertSee('gift_card')->assertSee('Not a service');
+    }
+
     public function test_employee_filter_check_reports_which_parameter_narrows_rows(): void
     {
         $org = \App\Models\Organization::firstOrCreate(['name' => 'GF']);
