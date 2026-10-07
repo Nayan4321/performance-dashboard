@@ -15,7 +15,7 @@
     @endforeach
 </div>
 <div class="card"><div class="table-responsive"><table class="table table-hover table-sm mb-0">
-    <thead><tr><th>Date</th><th>Guest</th><th>Service</th><th>Provider</th><th>Branch</th><th>Status</th><th class="text-end">Price</th></tr></thead>
+    <thead><tr><th>Date</th><th>Guest</th><th>Service</th><th>Provider</th><th>Created by</th><th>Branch</th><th>Status</th><th class="text-end">Price</th></tr></thead>
     <tbody>
     @forelse($rows as $a)
         <tr>
@@ -23,12 +23,13 @@
             <td>@if($a->guest?->zenoti_url)<a href="{{ $a->guest->zenoti_url }}" target="_blank" rel="noopener">{{ $a->guest->full_name }}</a>@else{{ $a->guest?->full_name ?? '—' }}@endif<div class="small text-muted">{{ $a->guest?->phone }}</div></td>
             <td>{{ $a->service_name }}</td>
             <td>{{ $a->employee?->full_name ?? '—' }}</td>
+            <td>{{ $a->bookedBy?->full_name ?? '—' }}@if($a->booked_at)<div class="small text-muted">{{ $a->booked_at->format('j M H:i') }}</div>@endif</td>
             <td>{{ $a->branch?->name ?? '—' }}</td>
             <td><span class="badge text-bg-{{ $colors[$a->status] ?? 'light' }}" title="Zenoti: {{ $a->raw_status }}">{{ $a->status ?? '—' }}</span></td>
             <td class="text-end">{{ config('app.currency_symbol') }}{{ number_format($a->price, 2) }}</td>
         </tr>
     @empty
-        <tr><td colspan="7" class="text-center text-muted py-4">No appointments in this period. If this stays empty, run a Zenoti sync from Admin › Integrations.</td></tr>
+        <tr><td colspan="8" class="text-center text-muted py-4">No appointments in this period. If this stays empty, run a Zenoti sync from Admin › Integrations.</td></tr>
     @endforelse
     </tbody>
 </table></div></div>

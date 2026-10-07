@@ -46,7 +46,7 @@ class RecordsController extends Controller
             'byStatus' => $byStatus,
             'total' => $byStatus->sum(),
             'rows' => (clone $base)->when($request->status, fn ($q, $s) => $q->where('status', $s))
-                ->with(['branch', 'employee', 'guest'])->orderByDesc('start_time')->paginate(50)->withQueryString(),
+                ->with(['branch', 'employee', 'guest', 'bookedBy'])->orderByDesc('start_time')->paginate(50)->withQueryString(),
             'branches' => $this->branches($request),
             'from' => $from, 'to' => $to,
         ]);

@@ -27,6 +27,12 @@ class Appointment extends Model
         return $this->belongsTo(Branch::class);
     }
 
+    /** Who created the appointment in Zenoti (booked by). */
+    public function bookedBy(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'booked_by_employee_id');
+    }
+
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);

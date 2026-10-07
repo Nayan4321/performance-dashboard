@@ -67,6 +67,14 @@ class AppFlowTest extends TestCase
         }
     }
 
+    public function test_appointments_page_shows_who_created_each_appointment(): void
+    {
+        $maker = \App\Models\Employee::create(['source' => 'zenoti', 'first_name' => 'Booker', 'last_name' => 'Person']);
+        \App\Models\Appointment::create(['branch_id' => Branch::first()->id, 'zenoti_id' => 'A-1', 'service_name' => 'Facial', 'status' => 'Serviced',
+            'start_time' => now(), 'booked_at' => now()->subDay(), 'booked_by_employee_id' => $maker->id, 'price' => 100]);
+        $this->actingAs($this->admin())->get(route('appointments.index'))->assertOk()->assertSee('Created by')->assertSee('Booker Person');
+    }
+
     public function test_invoices_page_groups_synced_sales_lines_per_invoice(): void
     {
         $branch = Branch::first();
