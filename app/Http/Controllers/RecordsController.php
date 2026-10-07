@@ -36,6 +36,7 @@ class RecordsController extends Controller
         [$from, $to] = $this->period($request);
         $base = $this->scoped(Appointment::query(), $request)
             ->when($request->user()->callgearEmployeeIds(), fn ($q, $ids) => $q->where(fn ($w) => $w->whereIn('booked_by_employee_id', $ids)->orWhereIn('employee_id', $ids)))
+            ->tap(fn ($q) => $this->tagged($q, $request, ['employee_id', 'booked_by_employee_id']))
             ->whereBetween('start_time', [$from, $to])
             ->when($request->q, fn ($q, $s) => $q->where(fn ($w) => $w->where('service_name', 'like', "%$s%")
                 ->orWhereHas('guest', fn ($g) => $g->where('first_name', 'like', "%$s%")->orWhere('last_name', 'like', "%$s%")->orWhere('phone', 'like', "%$s%"))));
@@ -47,7 +48,7 @@ class RecordsController extends Controller
             'total' => $byStatus->sum(),
             'rows' => (clone $base)->when($request->status, fn ($q, $s) => $q->where('status', $s))
                 ->with(['branch', 'employee', 'guest', 'bookedBy'])->orderByDesc('start_time')->paginate(50)->withQueryString(),
-            'branches' => $this->branches($request),
+            'branches' => $this->branches($request), 'tags' => \App\Models\Tag::orderBy('name')->get(),
             'from' => $from, 'to' => $to,
         ]);
     }
@@ -57,6 +58,7 @@ class RecordsController extends Controller
         [$from, $to] = $this->period($request);
         $base = $this->scoped(Sale::query(), $request)
             ->when($request->user()->callgearEmployeeIds(), fn ($q, $ids) => $q->where(fn ($w) => $w->whereIn('created_by_employee_id', $ids)->orWhereIn('employee_id', $ids)))
+            ->tap(fn ($q) => $this->tagged($q, $request, ['employee_id', 'created_by_employee_id']))
             ->whereBetween('sold_at', [$from, $to])
             ->when($request->q, fn ($q, $s) => $q->where(fn ($w) => $w->where('item_name', 'like', "%$s%")->orWhere('invoice_no', 'like', "%$s%")));
 
@@ -67,7 +69,7 @@ class RecordsController extends Controller
             'total' => $byCategory->sum('amount'),
             'rows' => (clone $base)->when($request->category, fn ($q, $c) => $q->where('category', $c))
                 ->with(['branch', 'employee'])->orderByDesc('sold_at')->paginate(50)->withQueryString(),
-            'branches' => $this->branches($request),
+            'branches' => $this->branches($request), 'tags' => \App\Models\Tag::orderBy('name')->get(),
             'from' => $from, 'to' => $to,
         ]);
     }
@@ -81,6 +83,7 @@ class RecordsController extends Controller
             ->whereBetween('sold_at', [$from, $to])
             ->when($own !== null, fn ($q) => $q->where(fn ($w) => $w->where('employee_id', $own)->orWhere('created_by_employee_id', $own)))
             ->when($request->user()->callgearEmployeeIds(), fn ($q, $ids) => $q->where(fn ($w) => $w->whereIn('created_by_employee_id', $ids)->orWhereIn('employee_id', $ids)))
+            ->tap(fn ($q) => $this->tagged($q, $request, ['employee_id', 'created_by_employee_id']))
             ->when($request->q, fn ($q, $s) => $q->where('invoice_no', 'like', "%$s%"));
 
         $invoices = (clone $base)->selectRaw('invoice_no, branch_id, min(sold_at) as first_at, count(*) as line_count, sum(net_amount) as net')
@@ -104,7 +107,7 @@ class RecordsController extends Controller
         return view('records.invoices', [
             'rows' => $invoices,
             'count' => (clone $base)->distinct()->count('invoice_no'),
-            'branches' => $this->branches($request),
+            'branches' => $this->branches($request), 'tags' => \App\Models\Tag::orderBy('name')->get(),
             'from' => $from, 'to' => $to,
             'column' => \App\Support\WidgetQuery::REVENUE_COLUMNS[\App\Support\WidgetQuery::revenueColumn()][0] ?? 'amount',
         ]);
@@ -115,6 +118,7 @@ class RecordsController extends Controller
         [$from, $to] = $this->period($request);
         $base = $this->scoped(\App\Models\Call::query(), $request)
             ->when($request->user()->callgearEmployeeIds(), fn ($q, $ids) => $q->whereIn('employee_id', $ids))
+            ->tap(fn ($q) => $this->tagged($q, $request, ['employee_id']))
             ->whereBetween('started_at', [$from, $to])
             ->when($request->q, fn ($q, $s) => $q->where(fn ($w) => $w->where('caller', 'like', "%$s%")->orWhere('callee', 'like', "%$s%")
                 ->orWhereHas('guest', fn ($g) => $g->where('first_name', 'like', "%$s%")->orWhere('last_name', 'like', "%$s%"))));
@@ -123,7 +127,7 @@ class RecordsController extends Controller
             'total' => (clone $base)->count(),
             'known' => (clone $base)->whereNotNull('guest_id')->count(),
             'rows' => $base->with(['branch', 'guest', 'employee'])->orderByDesc('started_at')->paginate(50)->withQueryString(),
-            'branches' => $this->branches($request),
+            'branches' => $this->branches($request), 'tags' => \App\Models\Tag::orderBy('name')->get(),
             'from' => $from, 'to' => $to,
         ]);
     }
@@ -157,6 +161,21 @@ class RecordsController extends Controller
             ->when($allowed !== null, fn ($q) => $q->whereIn('branch_id', $allowed ?: [0]))
             ->when($own !== null, fn ($q) => $hasEmployee ? $q->where('employee_id', $own) : $q->whereHas('appointments', fn ($a) => $a->where('employee_id', $own)))
             ->when($request->integer('branch_id'), fn ($q, $b) => $q->where('branch_id', $b));
+    }
+
+    /** ?tag_id=: rows where any of the given employee columns belongs to an employee with that tag. */
+    protected function tagged($query, Request $request, array $columns)
+    {
+        if (! ($tag = $request->integer('tag_id'))) {
+            return $query;
+        }
+        $ids = \Illuminate\Support\Facades\DB::table('employee_tag')->where('tag_id', $tag)->pluck('employee_id')->all() ?: [0];
+
+        return $query->where(function ($w) use ($columns, $ids) {
+            foreach ($columns as $c) {
+                $w->orWhereIn($c, $ids);
+            }
+        });
     }
 
     protected function branches(Request $request)
