@@ -29,7 +29,7 @@
     }
 
     /* ---------- rizz-style elements (ApexCharts) ---------- */
-    const APEX = ['stat', 'sparkline', 'radial', 'area', 'column', 'hbar', 'donut', 'progress', 'branch_table', 'employee_table', 'agent_table', 'agent_bars', 'agent_tags'];
+    const APEX = ['stat', 'sparkline', 'radial', 'area', 'column', 'hbar', 'donut', 'progress', 'branch_table', 'employee_table', 'agent_table', 'agent_bars', 'agent_tags', 'group_target'];
     const theme = () => document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
     const colorOf = name => css.getPropertyValue('--bs-' + name).trim() || SERIES[0];
     const apexBase = (money) => ({
@@ -115,6 +115,48 @@
                     label: { text: 'Target ' + fmt(target, cash), orientation: 'horizontal', style: { background: 'transparent', color: INK, fontSize: '11px' } } }] } : {},
                 grid: { strokeDashArray: 3, borderColor: GRID, xaxis: { lines: { show: true } }, yaxis: { lines: { show: false } } },
                 states: { active: { filter: { type: 'none' } } },
+            });
+            charts[id] = new ApexCharts(body.querySelector('.apex-box'), o);
+            charts[id].render();
+            return;
+        }
+
+        if (type === 'group_target') {
+            if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+            const aed = v => fmt(v) + ' AED';
+            const tiers = data.tiers || [], total = Number(data.total || 0), top = tiers.length ? tiers[tiers.length - 1][0] : 0;
+            const scale = Math.max(top * 1.05, total) || 1, at = v => Math.min(100, v / scale * 100);
+            const box = (label, value, sub, tone) => '<div class="col-6 col-lg-3"><div class="border rounded p-2 h-100"><div class="text-muted small">' + label + '</div>' +
+                '<div class="fs-18 fw-bold' + (tone ? ' text-' + tone : '') + '">' + value + '</div><div class="small text-muted">' + sub + '</div></div></div>';
+            const reached = data.tier !== null && data.tier !== undefined;
+            let html = '<div class="row g-2 mb-3">' +
+                box('Achieved by the group', aed(total), (data.agents || 0) + ' agents · ' + esc(card.dataset.range || ''), '') +
+                box('Commission now', reached ? data.rate + '%' : '0%', reached ? 'Tier ' + aed(data.tier) + ' reached · ≈ ' + aed(data.commission) + ' for the group' : 'First tier at ' + aed(tiers.length ? tiers[0][0] : 0), reached ? 'success' : 'danger') +
+                box('Next tier', data.next ? aed(data.next) : 'Top tier reached', data.next ? 'Pays ' + data.next_rate + '%' : 'Highest rate ' + data.rate + '%', 'primary') +
+                box(data.next ? 'Still to achieve' : 'Above top tier', data.next ? aed(data.to_next) : aed(total - top),
+                    data.projected !== null && data.projected !== undefined ? 'At this pace: ' + aed(data.projected) + ' by month end (' + data.projected_rate + '%)' : '', data.next ? 'warning' : 'success') +
+                '</div>';
+            html += '<div class="position-relative mb-5 mx-1" style="height:22px"><div class="progress h-100" role="progressbar" aria-valuenow="' + Math.round(at(total)) + '" aria-valuemin="0" aria-valuemax="100">' +
+                '<div class="progress-bar bg-' + (reached ? 'success' : 'warning') + '" style="width:' + at(total) + '%">' + (at(total) > 12 ? aed(total) : '') + '</div></div>';
+            tiers.forEach(t => {
+                const ok = total >= t[0];
+                html += '<div class="position-absolute top-0 h-100" style="left:' + at(t[0]) + '%;border-left:2px dashed ' + (ok ? colorOf('success') : INK) + '"></div>' +
+                    '<div class="position-absolute small text-center" style="left:' + at(t[0]) + '%;top:26px;transform:translateX(-50%);white-space:nowrap;line-height:1.2">' +
+                    '<span class="fw-semibold' + (ok ? ' text-success' : '') + '">' + (ok ? '✓ ' : '') + t[1] + '%</span><br><span class="text-muted">' + fmt(t[0] / 1000) + 'k</span></div>';
+            });
+            html += '</div><div class="small text-muted">Running total this period · dashed lines are the tiers (' + tiers.map(t => fmt(t[0] / 1000) + 'k = ' + t[1] + '%').join(', ') + ')</div><div class="apex-box"></div>';
+            body.innerHTML = html;
+            const o = apexBase(false);
+            const vals = data.values || [];
+            Object.assign(o, {
+                series: [{ name: 'Group revenue so far', data: vals }],
+                chart: Object.assign(o.chart, { type: 'area', height: 260 }),
+                colors: [colorOf('primary')],
+                stroke: { curve: 'smooth', width: 2 },
+                fill: { type: 'gradient', gradient: { opacityFrom: .35, opacityTo: .05 } },
+                xaxis: { categories: (data.labels || []).map(d => d.slice(8, 10) + '/' + d.slice(5, 7)), tickAmount: 10, labels: { rotate: 0 } },
+                yaxis: { min: 0, max: Math.ceil(Math.max(top * 1.05, ...vals.filter(v => v !== null).map(Number), 1)), labels: { formatter: v => fmt(Math.round(v / 1000)) + 'k' } },
+                annotations: { yaxis: tiers.map(t => ({ y: t[0], borderColor: total >= t[0] ? colorOf('success') : (colorOf('secondary') || '#888'), strokeDashArray: 4 })) },
             });
             charts[id] = new ApexCharts(body.querySelector('.apex-box'), o);
             charts[id].render();
@@ -282,7 +324,7 @@
         card._data = data;
         const body = card.querySelector('.widget-body');
         // Revenue and commission widgets draw with the agent chart and table.
-        const id = card.dataset.widget, type = ['agent_revenue', 'agent_commission'].includes(card.dataset.type) && data.type ? data.type : card.dataset.type, money = card.dataset.money === '1' ? true : (card.dataset.money === 'pct' ? 'pct' : false);
+        const id = card.dataset.widget, type = ['agent_revenue', 'agent_commission', 'agent_group_target'].includes(card.dataset.type) && data.type ? data.type : card.dataset.type, money = card.dataset.money === '1' ? true : (card.dataset.money === 'pct' ? 'pct' : false);
         if (data.error) { body.innerHTML = '<div class="text-danger small">' + esc(data.error) + '</div>'; return; }
         if (APEX.includes(type)) {
             if (typeof ApexCharts === 'undefined') { body.innerHTML = '<div class="text-danger small">Chart library failed to load.</div>'; return; }

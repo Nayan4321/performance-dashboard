@@ -80,7 +80,7 @@ class WidgetQuery
         if ($widget->type === 'agent_table' || $widget->type === 'agent_bars') {
             return $this->agentScores($widget, $ds);
         }
-        if ($widget->type === 'agent_revenue' || $widget->type === 'agent_commission') {
+        if (in_array($widget->type, ['agent_revenue', 'agent_commission', 'agent_group_target'], true)) {
             return $this->agentRevenue($widget);
         }
         if ($widget->type === 'agent_tags') {
@@ -426,13 +426,13 @@ class WidgetQuery
     }
 
     /** Tagged agents the user may see (active, or with data), for the agent widgets. */
-    private function agentEmployees(DashboardWidget $widget, array $withData = [])
+    private function agentEmployees(DashboardWidget $widget, array $withData = [], bool $wholeGroup = false)
     {
         $allowed = $this->user->visibleBranchIds();
         $q = Employee::with('tags')
             ->when($allowed !== null, fn ($q) => $q->whereIn('branch_id', $allowed ?: [0]))
             ->when($this->branchId, fn ($q) => $q->where('branch_id', $this->branchId))
-            ->when($this->user->visibleEmployeeId() !== null || $this->employeeId, fn ($q) => $q->whereKey($this->user->visibleEmployeeId() ?? $this->employeeId));
+            ->when(! $wholeGroup && ($this->user->visibleEmployeeId() !== null || $this->employeeId), fn ($q) => $q->whereKey($this->user->visibleEmployeeId() ?? $this->employeeId));
         $tags = $this->tagIds($widget);
         foreach ($tags as $tag) {
             $q->whereHas('tags', fn ($w) => $w->whereKey($tag));
@@ -451,16 +451,19 @@ class WidgetQuery
     private function agentRevenue(DashboardWidget $widget): array
     {
         [$from, $to] = $this->dateRange($widget->date_range);
-        $agents = $this->agentEmployees($widget);
+        // Targets and tiers are for the whole group, even when the viewer only sees her own row.
+        $agents = $this->agentEmployees($widget, [], true);
+        $shown = $this->agentEmployees($widget)->pluck('id')->all();
         $ids = $agents->pluck('id')->all();
         $revenue = array_fill_keys($ids, 0.0);
+        $daily = [];
         \App\Models\Sale::query()
             ->where(fn ($q) => $q->whereIn('employee_id', $ids ?: [0])->orWhereIn('created_by_employee_id', $ids ?: [0]))
             ->when($from, fn ($q) => $q->where('sold_at', '>=', $from))
             ->when($to, fn ($q) => $q->where('sold_at', '<=', $to))
             ->when($this->user->visibleBranchIds() !== null, fn ($q) => $q->whereIn('branch_id', $this->user->visibleBranchIds() ?: [0]))
-            ->select(['id', 'employee_id', 'created_by_employee_id', 'item_type', 'status', 'net_amount', 'raw'])
-            ->chunkById(1000, function ($lines) use (&$revenue) {
+            ->select(['id', 'employee_id', 'created_by_employee_id', 'item_type', 'status', 'net_amount', 'raw', 'sold_at'])
+            ->chunkById(1000, function ($lines) use (&$revenue, &$daily) {
                 foreach ($lines as $line) {
                     if (! self::countsAsAgentRevenue($line)) {
                         continue;
@@ -468,6 +471,8 @@ class WidgetQuery
                     $who = $line->employee_id !== null && isset($revenue[$line->employee_id]) ? $line->employee_id : $line->created_by_employee_id;
                     if ($who !== null && isset($revenue[$who])) {
                         $revenue[$who] += (float) $line->net_amount;
+                        $day = \Carbon\Carbon::parse($line->sold_at)->toDateString();
+                        $daily[$day] = ($daily[$day] ?? 0) + (float) $line->net_amount;
                     }
                 }
             });
@@ -480,7 +485,7 @@ class WidgetQuery
         $total = round(array_sum($revenue), 2);
         $counted = round($ladies->sum(fn ($e) => $revenue[$e->id]), 2);
 
-        $rows = $agents->map(fn (Employee $e) => [
+        $rows = $agents->whereIn('id', $shown)->map(fn (Employee $e) => [
             'key' => $e->id,
             'employee' => $e->full_name.($isLead($e) ? ' (team lead)' : ''),
             'lead' => $isLead($e),
@@ -492,17 +497,23 @@ class WidgetQuery
         $meta = ['team_target' => $teamTarget, 'target_each' => $each, 'agents' => $ladies->count(), 'total' => $total,
             'team_pct' => $teamTarget > 0 ? round($counted / $teamTarget * 100, 1) : null, 'counted' => $counted];
 
+        // Commission tiers are reached by the whole group: every Callgear agent, team lead included.
+        $tiers = collect($widget->option('tiers', self::COMMISSION_TIERS))
+            ->map(fn ($t) => [(float) $t[0], (float) $t[1]])->sortBy(0)->values();
+        $tier = $tiers->filter(fn ($t) => $total >= $t[0])->last();
+        $next = $tiers->first(fn ($t) => $total < $t[0]);
+        $rate = $tier[1] ?? 0.0;
+
+        if ($widget->type === 'agent_group_target') {
+            return $this->groupTarget($widget, $total, $tiers->all(), $tier, $next, $daily, $agents->count());
+        }
+
         if ($widget->type === 'agent_commission') {
-            $tiers = collect($widget->option('tiers', [[700000, 0.4], [800000, 0.5], [900000, 0.6], [1000000, 0.7]]))
-                ->map(fn ($t) => [(float) $t[0], (float) $t[1]])->sortBy(0)->values();
-            $tier = $tiers->filter(fn ($t) => $counted >= $t[0])->last();
-            $next = $tiers->first(fn ($t) => $counted < $t[0]);
-            $rate = $tier[1] ?? 0.0;
 
             return $meta + [
                 'type' => 'agent_table',
-                'note' => 'Team revenue '.number_format($counted).' AED'.($tier ? ': tier '.number_format($tier[0]).' AED reached, '.$rate.'% commission' : ': no tier reached yet')
-                    .($next ? '. Next tier '.number_format($next[0]).' AED ('.$next[1].'%), '.number_format($next[0] - $counted).' AED to go.' : '.'),
+                'note' => 'Group revenue '.number_format($total).' AED'.($tier ? ': tier '.number_format($tier[0]).' AED reached, '.$rate.'% commission' : ': no tier reached yet')
+                    .($next ? '. Next tier '.number_format($next[0]).' AED ('.$next[1].'%), '.number_format($next[0] - $total).' AED to go.' : '.'),
                 'tiers' => $tiers->all(),
                 'rate' => $rate,
                 'columns' => [['employee', 'Agent', 's'], ['revenue', 'Revenue', 'm'], ['target', 'Her target', 'm'], ['pct', '% of target', 'p'], ['commission', 'Commission ('.$rate.'%)', 'm']],
@@ -525,6 +536,51 @@ class WidgetQuery
             'values' => $rows->pluck('revenue')->all(),
             'percents' => $rows->map(fn ($r) => $r['pct'] ?? 100)->all(),
             'lead' => $rows->pluck('lead')->all(),
+        ];
+    }
+
+    public const COMMISSION_TIERS = [[700000, 0.4], [800000, 0.5], [900000, 0.6], [1000000, 0.7]];
+
+    /**
+     * Group commission target: all Callgear agents' revenue for the period against the tiers, what is
+     * left to the next tier, and the running total per day (with the pace to month end for this month).
+     */
+    private function groupTarget(DashboardWidget $widget, float $total, array $tiers, ?array $tier, ?array $next, array $daily, int $agents): array
+    {
+        [$from, $to] = $this->dateRange($widget->date_range);
+        $start = $from ? CarbonImmutable::parse($from)->startOfDay() : (count($daily) ? CarbonImmutable::parse(min(array_keys($daily))) : CarbonImmutable::now()->startOfMonth());
+        $end = $to ? CarbonImmutable::parse($to)->startOfDay() : CarbonImmutable::now()->startOfDay();
+        $today = CarbonImmutable::now()->startOfDay();
+        $labels = $running = [];
+        $sum = 0.0;
+        for ($d = $start, $n = 0; $d <= $end && $n < 400; $d = $d->addDay(), $n++) {
+            $sum += $daily[$d->toDateString()] ?? 0;
+            $labels[] = $d->toDateString();
+            $running[] = $d > $today ? null : round($sum, 2);
+        }
+        $projected = null;
+        if ($end > $today && $start <= $today) {
+            $elapsed = $start->diffInDays($today) + 1;
+            $projected = round($total / $elapsed * ($start->diffInDays($end) + 1), 2);
+        }
+        $top = $tiers ? end($tiers)[0] : 0;
+
+        return [
+            'type' => 'group_target',
+            'total' => $total,
+            'agents' => $agents,
+            'tiers' => $tiers,
+            'rate' => $tier[1] ?? 0.0,
+            'tier' => $tier[0] ?? null,
+            'next' => $next[0] ?? null,
+            'next_rate' => $next[1] ?? null,
+            'to_next' => $next ? round($next[0] - $total, 2) : null,
+            'commission' => round($total * ($tier[1] ?? 0) / 100, 2),
+            'pct_of_top' => $top > 0 ? round($total / $top * 100, 1) : null,
+            'projected' => $projected,
+            'projected_rate' => $projected !== null ? (collect($tiers)->filter(fn ($t) => $projected >= $t[0])->last()[1] ?? 0.0) : null,
+            'labels' => $labels,
+            'values' => $running,
         ];
     }
 

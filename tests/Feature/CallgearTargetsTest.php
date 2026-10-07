@@ -53,10 +53,19 @@ class CallgearTargetsTest extends TestCase
         $this->assertEquals(850000, $rev['counted']);
 
         $com = $get('Commission');
-        $this->assertEquals(0.5, $com['rate']); // 850k reached the 800k tier
+        $this->assertEquals(0.6, $com['rate']); // the whole group (lead included) made 900k
         $row = collect($com['rows'])->firstWhere('key', $ladies[1]->id);
-        $this->assertEquals(3250, $row['commission']);
+        $this->assertEquals(3900, $row['commission']);
         $this->assertNull(collect($com['rows'])->firstWhere('key', $kawther->id)['commission']);
+
+        $group = $get('Group target and commission');
+        $this->assertSame('group_target', $group['type']);
+        $this->assertEquals(900000, $group['total']);
+        $this->assertEquals(0.6, $group['rate']);
+        $this->assertEquals(1000000, $group['next']);
+        $this->assertEquals(0.7, $group['next_rate']);
+        $this->assertEquals(100000, $group['to_next']);
+        $this->assertEquals(900000, max(array_filter($group['values'], fn ($v) => $v !== null)));
 
         Call::create(['external_id' => 't1', 'employee_id' => $a1->id, 'started_at' => now(), 'tags' => 'Outgoing new sale, Processed']);
         Call::create(['external_id' => 't2', 'employee_id' => $a1->id, 'started_at' => now(), 'tags' => 'Outgoing new sale']);
@@ -71,7 +80,7 @@ class CallgearTargetsTest extends TestCase
         $this->actingAs($admin)->put(route('widgets.update', [$d, $w]), ['title' => 'Commission', 'type' => 'agent_commission', 'dataset' => 'sales', 'aggregate' => 'sum',
             'metric_field' => 'net_amount', 'width' => 12, 'date_range' => 'this_month', 'options' => ['team_target' => 800000, 'lead_tag' => 'Team lead', 'tiers_text' => "700000 = 0.4\n900,000 = 0.6"]])->assertRedirect();
         $this->assertEquals([[700000, 0.4], [900000, 0.6]], $w->fresh()->option('tiers'));
-        $this->assertEquals(0.4, $get('Commission')['rate']);
+        $this->assertEquals(0.6, $get('Commission')['rate']);
 
         $this->actingAs($admin)->get(route('dashboards.show', $d))->assertOk();
     }

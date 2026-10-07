@@ -33,6 +33,7 @@ class CallgearPerformanceDashboardSeeder extends Seeder
             $this->addRevenue($existing);
             $this->addBookings($existing);
             $this->addAfter($existing, self::REVENUE, self::COMMISSION_SPEC);
+            $this->addAfter($existing, self::REVENUE, self::GROUP_SPEC);
             $this->addAfter($existing, 'Talk minutes per day vs target (120)', self::TAGS_SPEC);
 
             return;
@@ -55,6 +56,7 @@ class CallgearPerformanceDashboardSeeder extends Seeder
             ['Agent scorecard (who is high or low)', 'agent_table', 'count', null, null, 12, $targets, 'this_month'],
             ['Call results by tag', 'agent_tags', 'count', null, null, 12, [], 'this_month'],
             [self::REVENUE, 'agent_revenue', 'sum', 'net_amount', null, 12, self::REVENUE_SPEC['options'], 'this_month', 'sales'],
+            [self::GROUP_SPEC['title'], 'agent_group_target', 'sum', 'net_amount', null, 12, self::GROUP_SPEC['options'], 'this_month', 'sales'],
             [self::COMMISSION_SPEC['title'], 'agent_commission', 'sum', 'net_amount', null, 12, self::COMMISSION_SPEC['options'], 'this_month', 'sales'],
             [self::BOOKINGS, 'hbar', 'count', null, 'employee', 12, self::BOOKINGS_OPTIONS, 'this_month', 'appointments'],
             ['Calls per day', 'area', 'count', null, 'day', 8, ['color' => 'primary'], 'this_month'],
@@ -82,6 +84,11 @@ class CallgearPerformanceDashboardSeeder extends Seeder
     private const COMMISSION_SPEC = ['title' => 'Commission', 'type' => 'agent_commission', 'dataset' => 'sales', 'aggregate' => 'sum', 'metric_field' => 'net_amount',
         'date_range' => 'this_month', 'width' => 12,
         'options' => ['team_target' => 800000, 'lead_tag' => 'Team lead', 'tiers' => [[700000, 0.4], [800000, 0.5], [900000, 0.6], [1000000, 0.7]]]];
+
+    /** All Callgear agents together against the commission tiers: achieved, left to the next tier, next rate. */
+    private const GROUP_SPEC = ['title' => 'Group target and commission', 'type' => 'agent_group_target', 'dataset' => 'sales', 'aggregate' => 'sum', 'metric_field' => 'net_amount',
+        'date_range' => 'this_month', 'width' => 12,
+        'options' => ['tiers' => [[700000, 0.4], [800000, 0.5], [900000, 0.6], [1000000, 0.7]]]];
 
     /** Calls per agent split by the result tag they put on them in CallGear. */
     private const TAGS_SPEC = ['title' => 'Call results by tag', 'type' => 'agent_tags', 'dataset' => 'calls', 'aggregate' => 'count', 'date_range' => 'this_month', 'width' => 12];
