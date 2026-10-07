@@ -2,7 +2,8 @@
 @section('title', 'Integrations')
 @section('content')
 <div class="d-flex align-items-center mb-3"><h1 class="h4 mb-0">Integrations</h1>
-    @if(Route::has('admin.integrations.test'))<a href="{{ route('admin.integrations.test') }}" class="btn btn-sm btn-outline-secondary ms-auto"><i class="bi bi-bug"></i> Test a Zenoti / CallGear call</a>@endif</div>
+    @if(Route::has('admin.integrations.test'))<a href="{{ route('admin.integrations.test') }}" class="btn btn-sm btn-outline-secondary ms-auto"><i class="bi bi-bug"></i> Test a Zenoti / CallGear call</a>@endif
+    @if(Route::has('admin.integrations.compare'))<a href="{{ route('admin.integrations.compare') }}" class="btn btn-sm btn-outline-secondary ms-2"><i class="bi bi-file-earmark-spreadsheet"></i> Compare revenue with a Zenoti export</a>@endif</div>
 <div class="row g-3 mb-4">
 @foreach($sources as $key => $source)
     <div class="col-md-6"><div class="card h-100"><div class="card-body">

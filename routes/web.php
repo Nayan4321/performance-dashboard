@@ -147,6 +147,8 @@ Route::middleware(['auth', 'active'])->group(function () {
             Route::post('integrations/run-now', [IntegrationController::class, 'runNow'])->name('integrations.run-now');
             Route::post('integrations/requests/{syncRequest}/cancel', [IntegrationController::class, 'cancel'])->name('integrations.cancel');
             Route::get('integrations/zenoti/test', [IntegrationController::class, 'test'])->name('integrations.test');
+            Route::get('integrations/zenoti/compare', [\App\Http\Controllers\Admin\RevenueCompareController::class, 'show'])->name('integrations.compare');
+            Route::post('integrations/zenoti/compare', [\App\Http\Controllers\Admin\RevenueCompareController::class, 'compare']);
         });
     });
 
