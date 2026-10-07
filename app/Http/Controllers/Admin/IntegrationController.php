@@ -90,6 +90,7 @@ class IntegrationController extends Controller
             'date' => $date,
             'rows' => count($rows),
             'counted_for_agents_total' => round($lines->sum('agent_revenue'), 2),
+            'amount_column' => \App\Support\WidgetQuery::REVENUE_COLUMNS[\App\Support\WidgetQuery::revenueColumn()][0],
             'all_fields' => $keys->all(),
             'lines' => $lines->take(15)->values()->all(),
         ];

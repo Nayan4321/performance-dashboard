@@ -635,13 +635,12 @@ class WidgetQuery
             return 'Invoice '.$line->status;
         }
         $pay = self::paymentOf($line);
-        if ($pay !== null) {
-            $p = mb_strtolower($pay);
-            // Not counted in the report: gift / prepaid cards, packages, memberships, loyalty, cashback, cheques.
-            if (preg_match('/gift|prepaid|package|membership|loyalty|cash ?back|no payment|cheque|check|non[- ]?financial/', $p)) {
-                return 'Paid by '.$pay;
-            }
-            if ($p !== '' && ! preg_match('/cash|card|custom[- ]?financial|visa|master|amex/', $p)) {
+        if ($pay !== null && trim($pay) !== '') {
+            // Like the report's Payment Type filter: the line counts when any of its payment types is
+            // Cash, Card or Custom-Financial (gift / prepaid cards, packages, memberships, loyalty don't).
+            $ok = collect(preg_split('/\s*[,;\/|]\s*/', mb_strtolower($pay)))->contains(fn ($p) => preg_match('/cash|card|custom[- ]?financial|visa|master|amex/', $p)
+                && ! preg_match('/gift|prepaid|package|membership|loyalty|cash ?back|no payment|cheque|check|non[- ]?financial/', $p));
+            if (! $ok) {
                 return 'Paid by '.$pay;
             }
         }
@@ -680,7 +679,37 @@ class WidgetQuery
             }
         }
 
-        return $used ? [round($sum, 2), implode(' + ', array_keys($used))] : [(float) $line->net_amount, 'net amount'];
+        if ($used) {
+            return [round($sum, 2), implode(' + ', array_keys($used))];
+        }
+        // Otherwise the column of the Sales-Accrual export the client totals (set on the Revenue widget).
+        $column = self::revenueColumn();
+        if ($column !== 'sales_exc_tax') {
+            foreach (self::REVENUE_COLUMNS[$column][1] as $k) {
+                if (array_key_exists($k, $raw) && is_numeric($raw[$k])) {
+                    return [(float) $raw[$k], self::REVENUE_COLUMNS[$column][0]];
+                }
+            }
+
+            return [(float) $line->net_amount, 'Sales (Exc. Tax): '.self::REVENUE_COLUMNS[$column][0].' not sent'];
+        }
+
+        return [(float) $line->net_amount, 'Sales (Exc. Tax)'];
+    }
+
+    /** Sales-Accrual export columns agent revenue can total, with the field names Zenoti's API may use. */
+    public const REVENUE_COLUMNS = [
+        'sales_exc_tax' => ['Sales (Exc. Tax)', []],
+        'sales_inc_tax' => ['Sales (Inc. Tax)', ['sales_inc_tax', 'sales_including_tax', 'sales_incl_tax', 'sales_inclusive_tax']],
+        'collected' => ['Collected', ['collected', 'collected_amount', 'collection']],
+        'sales_exc_redemption' => ['Sales (Exc. Redemption)', ['sales_exc_redemption', 'sales_excluding_redemption', 'sales_exc_redemptions']],
+    ];
+
+    public static function revenueColumn(): string
+    {
+        $c = (string) \App\Models\Setting::get('callgear.revenue_column', 'sales_exc_tax');
+
+        return array_key_exists($c, self::REVENUE_COLUMNS) ? $c : 'sales_exc_tax';
     }
 
     /** The payment type Zenoti sent on the line, if any. */

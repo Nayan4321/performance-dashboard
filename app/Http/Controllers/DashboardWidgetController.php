@@ -63,7 +63,12 @@ class DashboardWidgetController extends Controller
             'options.lead_tag' => 'nullable|string|max:60',
             'options.tiers_text' => 'nullable|string|max:1000',
             'options.tags_text' => 'nullable|string|max:1000',
+            'options.amount_column' => ['nullable', Rule::in(array_keys(WidgetQuery::REVENUE_COLUMNS))],
         ]);
+        // One amount column for all Callgear revenue widgets, so they always agree.
+        if (in_array($data['type'], WidgetQuery::AGENT_REVENUE_TYPES, true) && filled($data['options']['amount_column'] ?? null)) {
+            \App\Models\Setting::put('callgear.revenue_column', $data['options']['amount_column']);
+        }
         // "700000 = 0.4" lines become [[700000, 0.4], ...]; tag names become a list.
         $opts = $data['options'] ?? [];
         if (filled($opts['tiers_text'] ?? null)) {

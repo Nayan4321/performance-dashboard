@@ -46,6 +46,8 @@
                 <input type="number" step="any" min="0" name="options[team_target]" class="form-control form-control-sm" value="{{ $widget->option('team_target') }}" placeholder="800000"></div>
             <div class="col-md-3 opt-revenue"><label class="form-label small">Tag of the team lead (not in the split)</label>
                 <input name="options[lead_tag]" class="form-control form-control-sm" value="{{ $widget->option('lead_tag') }}" placeholder="Team lead"></div>
+            <div class="col-md-3 opt-amount"><label class="form-label small">Amount column (all Callgear revenue widgets)</label>
+                <select name="options[amount_column]" class="form-select form-select-sm">@foreach(\App\Support\WidgetQuery::REVENUE_COLUMNS as $k => $c)<option value="{{ $k }}" @selected(\App\Support\WidgetQuery::revenueColumn() === $k)>{{ $c[0] }}</option>@endforeach</select></div>
             <div class="col-md-6 opt-commission"><label class="form-label small">Commission tiers: team revenue = % (one per line)</label>
                 <textarea name="options[tiers_text]" rows="4" class="form-control form-control-sm" placeholder="700000 = 0.4">{{ collect($widget->option('tiers', [[700000, 0.4], [800000, 0.5], [900000, 0.6], [1000000, 0.7]]))->map(fn ($t) => $t[0].' = '.$t[1])->implode("\n") }}</textarea></div>
             <div class="col-md-6 opt-tags"><label class="form-label small">Tags to show, comma separated (empty = the 8 most used)</label>

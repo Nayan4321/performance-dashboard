@@ -108,6 +108,7 @@ function syncTypeOptions(form) {
     show('.opt-revenue', type === 'agent_revenue' || type === 'agent_commission');
     show('.opt-commission', type === 'agent_commission' || type === 'agent_group_target' || type === 'agent_tier_revenue');
     show('.opt-tags', type === 'agent_tags');
+    show('.opt-amount', ['agent_revenue', 'agent_commission', 'agent_group_target', 'agent_tier_revenue'].includes(type));
     const group = form.querySelector('[name=group_by]');
     group.disabled = SINGLE.includes(type) && type !== 'kpi';
 }
