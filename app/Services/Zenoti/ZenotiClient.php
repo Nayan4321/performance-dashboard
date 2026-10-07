@@ -232,34 +232,48 @@ class ZenotiClient
     {
         $path = 'reports/sales/accrual_basis/flat_file';
         $size = (int) config('zenoti.page_size', 100);
-        $body = ['center_ids' => [$centerId], 'start_date' => "$from 00:00:00", 'end_date' => "$to 23:59:59"];
         $rows = [];
         $fetched = 0;
         $previous = null;
         $total = 0;
+        $pageLen = null;
+        $this->lastShortfall = null;
         for ($page = 1; $page <= (int) config('zenoti.max_pages', 200); $page++) {
+            // Paging is sent both ways: Zenoti's report endpoints differ on where they read it.
+            $body = ['center_ids' => [$centerId], 'start_date' => "$from 00:00:00", 'end_date' => "$to 23:59:59",
+                'page' => $page, 'size' => $size, 'page_num' => $page, 'page_size' => $size];
             $data = $this->post($path.'?'.http_build_query(['page' => $page, 'size' => $size]), $body);
             if ($error = data_get($data, 'error.message')) {
                 throw new RuntimeException("Zenoti sales report: $error");
             }
             $batch = array_values(array_filter((array) ($data['sales'] ?? []), 'is_array'));
-            $sig = $batch ? md5(json_encode($batch[0]).count($batch)) : null;
-            if (! $batch || $sig === $previous) {
+            $sig = $batch ? md5(json_encode($batch[0]).json_encode(end($batch)).count($batch)) : null;
+            if (! $batch) {
+                break;
+            }
+            if ($sig === $previous) {
+                // The same page again: Zenoti ignored the page number, so the rest can't be reached.
+                $this->lastShortfall = "sales $from..$to: Zenoti repeated page 1 ($fetched lines), the rest was not returned";
                 break;
             }
             $previous = $sig;
+            $pageLen ??= count($batch);
             $fetched += count($batch);
             foreach ($batch as $row) {
                 if (empty($row['center_id']) || (string) $row['center_id'] === $centerId) {
                     $rows[] = $row;
                 }
             }
-            $total = (int) (data_get($data, 'total') ?? data_get($data, 'page_info.total') ?? 0);
-            if ($total ? $fetched >= $total : count($batch) < $size) {
+            $total = max($total, (int) (data_get($data, 'total') ?? data_get($data, 'page_info.total') ?? data_get($data, 'total_count') ?? 0));
+            // Only a short page ends the report ("total" is not trusted to stop: it can be a page count).
+            // A page of a round size below what we asked for is Zenoti's own cap, so keep going.
+            if (count($batch) < $size && (count($batch) % 50 !== 0 || count($batch) < $pageLen)) {
                 break;
             }
         }
-        $this->lastShortfall = $total && $fetched < $total ? "sales $from..$to: got $fetched of $total lines" : null;
+        if (! $this->lastShortfall && $total > $fetched && $total > ($pageLen ?? 0)) {
+            $this->lastShortfall = "sales $from..$to: got $fetched of $total lines";
+        }
 
         return $rows;
     }

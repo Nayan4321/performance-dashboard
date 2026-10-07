@@ -568,7 +568,8 @@ class ZenotiSource implements PerformanceSource
         $short = [];
         foreach ($this->syncedBranches() as $branch) {
             $this->perCenter($branch, $counts, function () use ($branch, $from, $to, &$counts, $accrual, &$short) {
-                foreach ($this->chunks($from, $to, branch: $branch) as [$a, $b]) {
+                // The accrual report is read one day at a time, so a busy branch needs few pages.
+                foreach ($this->chunks($from, $to, $accrual ? 1 : 7, $branch) as [$a, $b]) {
                     $rows = $accrual ? $this->client->salesAccrual($branch->zenoti_center_id, $a, $b) : $this->client->sales($branch->zenoti_center_id, $a, $b);
                     if ($accrual && $this->client->lastShortfall) {
                         $short[] = $branch->name.' '.$this->client->lastShortfall;

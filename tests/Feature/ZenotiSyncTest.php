@@ -213,6 +213,31 @@ class ZenotiSyncTest extends TestCase
         $this->actingAs($admin)->post(route('autosync.nudge'))->assertOk();
     }
 
+    public function test_accrual_report_reads_every_page_even_when_total_is_the_page_size(): void
+    {
+        config(['zenoti.page_size' => 100, 'zenoti.api_url' => config('zenoti.api_url') ?: 'https://api.zenoti.test/v1']);
+        $rows = collect(range(1, 250))->map(fn ($i) => ['invoice_item_id' => "L$i", 'invoice_no' => "S$i", 'center_id' => 'c1', 'sale_date' => now()->toDateString(), 'sales_exc_tax' => 10]);
+        Http::fake(function ($request) use ($rows) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $q);
+            $page = (int) ($q['page'] ?? 1);
+
+            return Http::response(['sales' => $rows->slice(($page - 1) * 100, 100)->values()->all(), 'total' => 100]);
+        });
+        $client = app(\App\Services\Zenoti\ZenotiClient::class);
+        $this->assertCount(250, $client->salesAccrual('c1', now()->toDateString(), now()->toDateString()));
+        $this->assertNull($client->lastShortfall);
+    }
+
+    public function test_accrual_report_stops_and_reports_when_zenoti_repeats_page_one(): void
+    {
+        config(['zenoti.page_size' => 100, 'zenoti.api_url' => config('zenoti.api_url') ?: 'https://api.zenoti.test/v1']);
+        $rows = collect(range(1, 100))->map(fn ($i) => ['invoice_item_id' => "L$i", 'invoice_no' => "S$i", 'center_id' => 'c1', 'sale_date' => now()->toDateString(), 'sales_exc_tax' => 10]);
+        Http::fake(fn () => Http::response(['sales' => $rows->all(), 'total' => 250]));
+        $client = app(\App\Services\Zenoti\ZenotiClient::class);
+        $this->assertCount(100, $client->salesAccrual('c1', now()->toDateString(), now()->toDateString()));
+        $this->assertStringContainsString('repeated page 1', $client->lastShortfall);
+    }
+
     public function test_automatic_sales_sync_takes_one_branch_per_round_and_rereads_two_weeks(): void
     {
         config(['zenoti.sales_source' => 'accrual']);
