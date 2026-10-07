@@ -34,6 +34,7 @@ class CallgearPerformanceDashboardSeeder extends Seeder
             $this->addBookings($existing);
             $this->addAfter($existing, self::REVENUE, self::COMMISSION_SPEC);
             $this->addAfter($existing, self::REVENUE, self::GROUP_SPEC);
+            $this->addAfter($existing, self::GROUP_SPEC['title'], self::TIER_REVENUE_SPEC);
             $this->addAfter($existing, 'Talk minutes per day vs target (120)', self::TAGS_SPEC);
 
             return;
@@ -57,6 +58,7 @@ class CallgearPerformanceDashboardSeeder extends Seeder
             ['Call results by tag', 'agent_tags', 'count', null, null, 12, [], 'this_month'],
             [self::REVENUE, 'agent_revenue', 'sum', 'net_amount', null, 12, self::REVENUE_SPEC['options'], 'this_month', 'sales'],
             [self::GROUP_SPEC['title'], 'agent_group_target', 'sum', 'net_amount', null, 12, self::GROUP_SPEC['options'], 'this_month', 'sales'],
+            [self::TIER_REVENUE_SPEC['title'], 'agent_tier_revenue', 'sum', 'net_amount', null, 12, self::TIER_REVENUE_SPEC['options'], 'this_month', 'sales'],
             [self::COMMISSION_SPEC['title'], 'agent_commission', 'sum', 'net_amount', null, 12, self::COMMISSION_SPEC['options'], 'this_month', 'sales'],
             [self::BOOKINGS, 'hbar', 'count', null, 'employee', 12, self::BOOKINGS_OPTIONS, 'this_month', 'appointments'],
             ['Calls per day', 'area', 'count', null, 'day', 8, ['color' => 'primary'], 'this_month'],
@@ -87,6 +89,11 @@ class CallgearPerformanceDashboardSeeder extends Seeder
 
     /** All Callgear agents together against the commission tiers: achieved, left to the next tier, next rate. */
     private const GROUP_SPEC = ['title' => 'Group target and commission', 'type' => 'agent_group_target', 'dataset' => 'sales', 'aggregate' => 'sum', 'metric_field' => 'net_amount',
+        'date_range' => 'this_month', 'width' => 12,
+        'options' => ['tiers' => [[700000, 0.4], [800000, 0.5], [900000, 0.6], [1000000, 0.7]]]];
+
+    /** Each agent's revenue against her equal share of every group tier (700k / agents at 0.4% ... 1M / agents at 0.7%). */
+    private const TIER_REVENUE_SPEC = ['title' => 'Revenue vs group tiers (equal share)', 'type' => 'agent_tier_revenue', 'dataset' => 'sales', 'aggregate' => 'sum', 'metric_field' => 'net_amount',
         'date_range' => 'this_month', 'width' => 12,
         'options' => ['tiers' => [[700000, 0.4], [800000, 0.5], [900000, 0.6], [1000000, 0.7]]]];
 

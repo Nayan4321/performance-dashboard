@@ -29,7 +29,7 @@
     }
 
     /* ---------- rizz-style elements (ApexCharts) ---------- */
-    const APEX = ['stat', 'sparkline', 'radial', 'area', 'column', 'hbar', 'donut', 'progress', 'branch_table', 'employee_table', 'agent_table', 'agent_bars', 'agent_tags', 'group_target'];
+    const APEX = ['stat', 'sparkline', 'radial', 'area', 'column', 'hbar', 'donut', 'progress', 'branch_table', 'employee_table', 'agent_table', 'agent_bars', 'agent_tags', 'group_target', 'tier_bars'];
     const theme = () => document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
     const colorOf = name => css.getPropertyValue('--bs-' + name).trim() || SERIES[0];
     const apexBase = (money) => ({
@@ -118,6 +118,37 @@
             });
             charts[id] = new ApexCharts(body.querySelector('.apex-box'), o);
             charts[id].render();
+            return;
+        }
+
+        if (type === 'tier_bars') {
+            if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+            const aed = v => fmt(Math.round(v)) + ' AED';
+            const rows = data.rows || [], shares = data.shares || [], n = data.agents || 0;
+            const tones = ['warning', 'info', 'primary', 'success'];
+            const toneOf = rate => { const i = shares.findIndex(s => s[1] === rate); return i < 0 ? 'danger' : tones[Math.min(tones.length - 1, i + Math.max(0, tones.length - shares.length))]; };
+            let html = '<div class="d-flex flex-wrap gap-2 small mb-3"><span class="text-muted">Each group tier split equally between ' + n + ' agents:</span>' +
+                shares.map(s => '<span class="badge bg-light text-dark border fw-normal"><b>' + s[1] + '%</b> from ' + aed(s[0]) + ' each <span class="text-muted">(' + fmt(s[2] / 1000) + 'k ÷ ' + n + ') = ' + aed(s[0] * s[1] / 100) + '</span></span>').join('') + '</div>';
+            if (!rows.length) {
+                body.innerHTML = html + '<div class="text-muted small py-4 text-center">No agents yet. Tag employees "Callgear" on the Employees page.</div>';
+                return;
+            }
+            const top = shares.length ? shares[shares.length - 1][0] : 0;
+            const scale = top * 1.15 || Math.max(...rows.map(r => Number(r.revenue)), 1), at = v => Math.min(100, v / scale * 100);
+            rows.forEach((r, i) => {
+                const tone = toneOf(r.rate);
+                html += '<div class="row g-2 align-items-center mb-2 tier-row" data-i="' + i + '" style="cursor:pointer">' +
+                    '<div class="col-md-2 small fw-medium text-truncate" title="' + esc(r.employee) + '">' + esc(r.employee) + '</div>' +
+                    '<div class="col-md-6"><div class="position-relative" style="height:18px"><div class="progress h-100"><div class="progress-bar bg-' + tone + '" style="width:' + at(r.revenue) + '%"></div></div>' +
+                    shares.map(s => '<div class="position-absolute top-0 h-100" title="' + s[1] + '% from ' + aed(s[0]) + '" style="left:' + at(s[0]) + '%;border-left:2px dashed ' + (r.revenue >= s[0] ? colorOf('success') : INK) + '"></div>').join('') +
+                    '</div></div>' +
+                    '<div class="col-md-4 small"><b>' + aed(r.revenue) + '</b> · ' + (r.rate ? '<span class="text-' + tone + ' fw-semibold">' + r.rate + '% = ' + aed(r.commission) + '</span>' : '<span class="text-danger">no tier yet</span>') +
+                    (r.next ? ' · <span class="text-muted">' + aed(r.to_next) + ' to ' + r.next_rate + '%</span>' : ' · <span class="text-success">top tier</span>') + '</div></div>';
+            });
+            html += '<div class="row g-2"><div class="col-md-2"></div><div class="col-md-6 position-relative small text-muted" style="height:16px">' +
+                shares.map(s => '<span class="position-absolute" style="left:' + at(s[0]) + '%;transform:translateX(-50%)">' + s[1] + '%</span>').join('') + '</div></div>';
+            body.innerHTML = html;
+            body.querySelectorAll('.tier-row').forEach(el => el.addEventListener('click', () => drill(card, Number(el.dataset.i))));
             return;
         }
 
@@ -324,7 +355,7 @@
         card._data = data;
         const body = card.querySelector('.widget-body');
         // Revenue and commission widgets draw with the agent chart and table.
-        const id = card.dataset.widget, type = ['agent_revenue', 'agent_commission', 'agent_group_target'].includes(card.dataset.type) && data.type ? data.type : card.dataset.type, money = card.dataset.money === '1' ? true : (card.dataset.money === 'pct' ? 'pct' : false);
+        const id = card.dataset.widget, type = ['agent_revenue', 'agent_commission', 'agent_group_target', 'agent_tier_revenue'].includes(card.dataset.type) && data.type ? data.type : card.dataset.type, money = card.dataset.money === '1' ? true : (card.dataset.money === 'pct' ? 'pct' : false);
         if (data.error) { body.innerHTML = '<div class="text-danger small">' + esc(data.error) + '</div>'; return; }
         if (APEX.includes(type)) {
             if (typeof ApexCharts === 'undefined') { body.innerHTML = '<div class="text-danger small">Chart library failed to load.</div>'; return; }

@@ -80,7 +80,7 @@ class WidgetQuery
         if ($widget->type === 'agent_table' || $widget->type === 'agent_bars') {
             return $this->agentScores($widget, $ds);
         }
-        if (in_array($widget->type, ['agent_revenue', 'agent_commission', 'agent_group_target'], true)) {
+        if (in_array($widget->type, ['agent_revenue', 'agent_commission', 'agent_group_target', 'agent_tier_revenue'], true)) {
             return $this->agentRevenue($widget);
         }
         if ($widget->type === 'agent_tags') {
@@ -506,6 +506,32 @@ class WidgetQuery
 
         if ($widget->type === 'agent_group_target') {
             return $this->groupTarget($widget, $total, $tiers->all(), $tier, $next, $daily, $agents->count());
+        }
+
+        if ($widget->type === 'agent_tier_revenue') {
+            // Each group tier split equally between all agents (team lead included): each one's own share and rate.
+            $n = max(1, $agents->count());
+            $shares = $tiers->map(fn ($t) => [round($t[0] / $n, 2), $t[1], $t[0]])->all();
+            $own = fn ($v) => collect($shares)->filter(fn ($t) => $v >= $t[0])->last();
+            $tierRows = $agents->whereIn('id', $shown)->map(fn (Employee $e) => ['key' => $e->id, 'employee' => $e->full_name, 'revenue' => round($revenue[$e->id], 2)])
+                ->sortByDesc('revenue')->values()->map(function ($r) use ($own, $shares) {
+                    $t = $own($r['revenue']);
+                    $next = collect($shares)->first(fn ($s) => $r['revenue'] < $s[0]);
+
+                    return $r + ['rate' => $t[1] ?? 0.0, 'commission' => round($r['revenue'] * ($t[1] ?? 0) / 100, 2),
+                        'next' => $next[0] ?? null, 'next_rate' => $next[1] ?? null, 'to_next' => $next ? round($next[0] - $r['revenue'], 2) : null];
+                });
+
+            return [
+                'type' => 'tier_bars',
+                'field' => 'employee',
+                'agents' => $n,
+                'shares' => $shares,
+                'labels' => $tierRows->pluck('employee')->all(),
+                'keys' => $tierRows->pluck('key')->all(),
+                'values' => $tierRows->pluck('revenue')->all(),
+                'rows' => $tierRows->all(),
+            ];
         }
 
         if ($widget->type === 'agent_commission') {

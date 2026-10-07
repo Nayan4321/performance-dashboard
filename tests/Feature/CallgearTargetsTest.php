@@ -67,6 +67,19 @@ class CallgearTargetsTest extends TestCase
         $this->assertEquals(100000, $group['to_next']);
         $this->assertEquals(900000, max(array_filter($group['values'], fn ($v) => $v !== null)));
 
+        // Each tier split equally between all 6 agents: 700k / 6 = 116,667 at 0.4% ... 1M / 6 = 166,667 at 0.7%.
+        $tierRev = $get('Revenue vs group tiers (equal share)');
+        $this->assertSame('tier_bars', $tierRev['type']);
+        $this->assertEquals(6, $tierRev['agents']);
+        $this->assertEquals(round(1000000 / 6, 2), $tierRev['shares'][3][0]);
+        $r1 = collect($tierRev['rows'])->firstWhere('key', $a1->id);       // 200k: past the 1M / 6 share
+        $this->assertEquals(0.7, $r1['rate']);
+        $this->assertEquals(1400, $r1['commission']);
+        $rk = collect($tierRev['rows'])->firstWhere('key', $kawther->id);  // 50k: below every share
+        $this->assertEquals(0, $rk['rate']);
+        $this->assertEquals(round(700000 / 6 - 50000, 2), $rk['to_next']);
+        $this->assertNotNull($d->widgets()->where('title', 'Revenue')->where('type', 'agent_revenue')->first());
+
         Call::create(['external_id' => 't1', 'employee_id' => $a1->id, 'started_at' => now(), 'tags' => 'Outgoing new sale, Processed']);
         Call::create(['external_id' => 't2', 'employee_id' => $a1->id, 'started_at' => now(), 'tags' => 'Outgoing new sale']);
         Call::create(['external_id' => 't3', 'employee_id' => $ladies[2]->id, 'started_at' => now(), 'tags' => 'Incoming booking call']);
