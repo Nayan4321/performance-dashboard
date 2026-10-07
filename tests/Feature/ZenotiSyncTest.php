@@ -213,6 +213,36 @@ class ZenotiSyncTest extends TestCase
         $this->actingAs($admin)->post(route('autosync.nudge'))->assertOk();
     }
 
+    public function test_automatic_sales_sync_takes_one_branch_per_round_and_rereads_two_weeks(): void
+    {
+        config(['zenoti.sales_source' => 'accrual']);
+        $org = \App\Models\Organization::firstOrCreate(['name' => 'GF']);
+        $m2 = Branch::create(['organization_id' => $org->id, 'name' => 'M2', 'zenoti_center_id' => 'c-m2', 'is_active' => true]);
+        $jum = Branch::create(['organization_id' => $org->id, 'name' => 'Jumeirah', 'zenoti_center_id' => 'c-jum', 'is_active' => true]);
+        Http::fake(function ($request) {
+            if (str_contains($request->url(), 'accrual_basis')) {
+                $center = $request['center_ids'][0];
+
+                return Http::response(['sales' => (int) ($request->data()['page'] ?? 1) > 1 || str_contains($request->url(), 'page=2') ? [] : [[
+                    'invoice_item_id' => 'L-'.$center.'-'.$request['start_date'], 'invoice_no' => 'S-'.$center, 'center_id' => $center, 'sale_date' => now()->toDateString(),
+                    'item_type' => 'Service', 'sales_exc_tax' => 100, 'sales_inc_tax' => 105, 'status' => 'Closed']], 'total' => 1]);
+            }
+
+            return Http::response([]);
+        });
+        \Illuminate\Support\Facades\Cache::forget('autosync.sales_cursor');
+
+        $this->assertSame((string) $m2->id, \App\Support\AutoSync::salesRound());
+        $this->assertTrue(\App\Models\Sale::where('branch_id', $m2->id)->exists());
+        $this->assertFalse(\App\Models\Sale::where('branch_id', $jum->id)->exists());
+        // The first round of a branch re-reads 14 days (two 7-day pages of the report).
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'accrual_basis') && $r['center_ids'] === ['c-m2'] && str_starts_with($r['start_date'], now()->subDays(14)->toDateString()));
+
+        $this->assertSame((string) $jum->id, \App\Support\AutoSync::salesRound());
+        $this->assertTrue(\App\Models\Sale::where('branch_id', $jum->id)->exists());
+        $this->assertSame((string) $m2->id, \App\Support\AutoSync::salesRound()); // back to the first
+    }
+
     public function test_callgear_agents_match_partial_names_and_can_be_linked_by_hand(): void
     {
         config(['callgear.enabled' => true, 'callgear.access_token' => 'cg', 'callgear.base_url' => 'https://cg.test/v2.0']);

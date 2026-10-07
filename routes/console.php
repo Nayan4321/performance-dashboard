@@ -14,8 +14,11 @@ Schedule::call(fn () => \App\Console\Commands\RunSyncRequests::beat())->everyMin
 Schedule::command('integrations:run-requests')->everyMinute()->withoutOverlapping(240);
 Schedule::command('integrations:sync zenoti --entity=appointments')->everyFiveMinutes()->withoutOverlapping(30)
     ->skip(fn () => SyncRequest::where('status', 'running')->exists());
+// Only a running sales "Sync now" holds this back; a long guest backfill must not starve revenue.
 Schedule::command('integrations:sync zenoti --entity=sales')->everyFiveMinutes()->withoutOverlapping(30)
-    ->skip(fn () => SyncRequest::where('status', 'running')->exists());
+    ->skip(fn () => SyncRequest::where('status', 'running')->where(fn ($q) => $q->whereNull('entity')->orWhere('entity', 'sales'))->exists());
+// Invoices close days after the sale (and closing decides what counts), so re-read two weeks every few hours.
+Schedule::command('integrations:sync zenoti --entity=sales --days=14')->everyThreeHours()->withoutOverlapping(120);
 Schedule::command('integrations:sync zenoti --entity=guests')->everyFifteenMinutes()->withoutOverlapping(30)
     ->skip(fn () => SyncRequest::where('status', 'running')->exists());
 Schedule::command('integrations:sync zenoti --entity=leads')->everyFifteenMinutes()->withoutOverlapping(30)

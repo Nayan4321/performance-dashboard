@@ -19,7 +19,6 @@ class AutoSync
     private const JOBS = [
         'callgear' => ['integrations:sync', ['provider' => 'callgear'], 300],
         'appointments' => ['integrations:sync', ['provider' => 'zenoti', '--entity' => 'appointments'], 300],
-        'sales' => ['integrations:sync', ['provider' => 'zenoti', '--entity' => 'sales'], 300],
         'guests' => ['integrations:sync', ['provider' => 'zenoti', '--entity' => 'guests'], 900],
         'leads' => ['integrations:sync', ['provider' => 'zenoti', '--entity' => 'leads'], 900],
         'employees' => ['integrations:sync', ['provider' => 'zenoti', '--entity' => 'employees'], 3600],
@@ -36,6 +35,29 @@ class AutoSync
         $at = Cache::get(self::LAST_TICK);
 
         return $at ? \Illuminate\Support\Carbon::parse($at) : null;
+    }
+
+    /** Days of sales each branch round re-reads: invoices close days after the sale, and closing changes what counts. */
+    public const SALES_REFRESH_DAYS = 14;
+
+    /**
+     * Sync sales for the next branch in turn. The turn moves on before the work starts, so a branch
+     * the host cuts off doesn't block the others. Each branch re-reads the last 14 days every few
+     * hours (open invoices that closed since, missed days) and the last 2 days otherwise.
+     */
+    public static function salesRound(): ?string
+    {
+        $branches = \App\Models\Branch::whereNotNull('zenoti_center_id')->where('is_active', true)->orderBy('id')->pluck('id')->all();
+        if (! $branches) {
+            return null;
+        }
+        $i = ((int) Cache::get('autosync.sales_cursor', -1) + 1) % count($branches);
+        Cache::forever('autosync.sales_cursor', $i);
+        $branch = $branches[$i];
+        $deep = Cache::add("autosync.sales_deep.$branch", true, 3 * 3600);
+        Artisan::call('integrations:sync', ['provider' => 'zenoti', '--entity' => 'sales', '--branch' => $branch, '--days' => $deep ? self::SALES_REFRESH_DAYS : 2]);
+
+        return (string) $branch;
     }
 
     /** Is a tick due (nothing ran in the last few minutes)? */
@@ -64,7 +86,17 @@ class AutoSync
             Cache::forever(self::LAST_TICK, now()->toIso8601String());
             // The host stops long web requests, so guest profiles go in short rounds here too.
             config(['zenoti.guest_details_seconds' => min((int) config('zenoti.guest_details_seconds'), (int) config('zenoti.web_guest_seconds', 90))]);
-            // "Sync now" requests first, in short rounds.
+            // Sales first, one branch per tick, so revenue never waits behind a long guest backfill
+            // and a host time limit can't keep cutting the sync off before the same branches.
+            if (Cache::add('autosync.job.sales_branch', true, 60)) {
+                try {
+                    self::salesRound();
+                    $ran[] = 'sales';
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+            // "Sync now" requests next, in short rounds.
             Artisan::call('integrations:run-requests', ['--web' => true]);
             if (SyncRequest::whereIn('status', ['running', 'queued'])->exists()) {
                 return ['requests'];

@@ -50,7 +50,9 @@ class EmployeeMatcher
             return;
         }
         $this->byCode = $this->byName = [];
-        Employee::query()->get(['id', 'first_name', 'last_name', 'raw'])->each(function (Employee $e) {
+        // Same name twice (an old CallGear copy, a former employee): prefer the active Zenoti record.
+        Employee::query()->orderByRaw('zenoti_id is null')->orderByDesc('is_active')->orderBy('id')
+            ->get(['id', 'first_name', 'last_name', 'raw'])->each(function (Employee $e) {
             $this->byName[self::key($e->full_name)] ??= $e->id;
             $code = ZenotiMapper::pick((array) $e->raw, ['code', 'employee_code', 'personal_info.code']);
             if ($code) {
