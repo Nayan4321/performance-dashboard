@@ -20,6 +20,8 @@
     <php>
         <env name="APP_ENV" value="testing"/>
         <env name="ZENOTI_GUEST_DETAILS_DELAY_MS" value="0"/>
+        <env name="ZENOTI_SALES_DELAY_MS" value="0"/>
+        <env name="ZENOTI_QUOTA_WAIT_SECONDS" value="0"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>

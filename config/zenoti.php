@@ -16,7 +16,11 @@ return [
     // fetch profiles in short rounds that queue the rest.
     'web_guest_seconds' => env('ZENOTI_WEB_GUEST_SECONDS', 90),
     // Pause between profile calls so a big backlog doesn't use up Zenoti's API quota (1200 ms = 50 a minute).
-    'guest_details_delay_ms' => env('ZENOTI_GUEST_DETAILS_DELAY_MS', 1200),
+    'guest_details_delay_ms' => env('ZENOTI_GUEST_DETAILS_DELAY_MS', 3000),
+    // Sales report calls are spaced out, and wait for the quota to refill on a 429 (Account quota exceeded).
+    'sales_delay_ms' => env('ZENOTI_SALES_DELAY_MS', 1500),
+    'quota_wait_seconds' => env('ZENOTI_QUOTA_WAIT_SECONDS', 65),
+    'quota_retries' => env('ZENOTI_QUOTA_RETRIES', 4),
 
     // Shared secret appended to the webhook URL you register in Zenoti:
     // https://your-domain/webhooks/zenoti?token=THIS_VALUE

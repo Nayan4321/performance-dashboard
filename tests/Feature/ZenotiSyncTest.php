@@ -228,6 +228,20 @@ class ZenotiSyncTest extends TestCase
         $this->assertNull($client->lastShortfall);
     }
 
+    public function test_accrual_report_waits_and_retries_when_zenoti_quota_is_exceeded(): void
+    {
+        config(['zenoti.page_size' => 100, 'zenoti.quota_wait_seconds' => 0, 'zenoti.api_url' => config('zenoti.api_url') ?: 'https://api.zenoti.test/v1']);
+        $calls = 0;
+        Http::fake(function () use (&$calls) {
+            return ++$calls === 1
+                ? Http::response(['code' => 429, 'message' => 'Account quota exceeded!'], 429)
+                : Http::response(['sales' => [['invoice_item_id' => 'L1', 'invoice_no' => 'S1', 'center_id' => 'c1', 'sale_date' => now()->toDateString()]], 'total' => 1]);
+        });
+        $client = app(\App\Services\Zenoti\ZenotiClient::class);
+        $this->assertCount(1, $client->salesAccrual('c1', now()->toDateString(), now()->toDateString()));
+        $this->assertSame(2, $calls);
+    }
+
     public function test_accrual_report_stops_and_reports_when_zenoti_repeats_page_one(): void
     {
         config(['zenoti.page_size' => 100, 'zenoti.api_url' => config('zenoti.api_url') ?: 'https://api.zenoti.test/v1']);

@@ -54,6 +54,32 @@ class ZenotiClient
         return is_array($json) ? $json : [];
     }
 
+    private static float $lastPacedCall = 0;
+
+    /**
+     * Run one report call under Zenoti's calls-per-minute quota: space calls out, and on
+     * "Account quota exceeded" wait for the quota to refill and try again instead of failing.
+     */
+    public function paced(callable $call): array
+    {
+        $gap = (int) config('zenoti.sales_delay_ms', 1500) / 1000;
+        for ($attempt = 0; ; $attempt++) {
+            $wait = self::$lastPacedCall + $gap - microtime(true);
+            if ($wait > 0) {
+                usleep((int) ($wait * 1_000_000));
+            }
+            self::$lastPacedCall = microtime(true);
+            try {
+                return $call();
+            } catch (ZenotiQuotaExceeded $e) {
+                if ($attempt >= (int) config('zenoti.quota_retries', 4)) {
+                    throw $e;
+                }
+                sleep((int) config('zenoti.quota_wait_seconds', 65));
+            }
+        }
+    }
+
     public function post(string $path, array $body = []): array
     {
         $response = $this->http()->post($path, $body);
@@ -242,7 +268,7 @@ class ZenotiClient
             // Paging is sent both ways: Zenoti's report endpoints differ on where they read it.
             $body = ['center_ids' => [$centerId], 'start_date' => "$from 00:00:00", 'end_date' => "$to 23:59:59",
                 'page' => $page, 'size' => $size, 'page_num' => $page, 'page_size' => $size];
-            $data = $this->post($path.'?'.http_build_query(['page' => $page, 'size' => $size]), $body);
+            $data = $this->paced(fn () => $this->post($path.'?'.http_build_query(['page' => $page, 'size' => $size]), $body));
             if ($error = data_get($data, 'error.message')) {
                 throw new RuntimeException("Zenoti sales report: $error");
             }
