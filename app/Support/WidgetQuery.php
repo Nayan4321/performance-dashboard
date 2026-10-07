@@ -474,9 +474,10 @@ class WidgetQuery
                     }
                     $who = $line->created_by_employee_id;
                     if ($who !== null && isset($revenue[$who])) {
-                        $revenue[$who] += (float) $line->net_amount;
+                        $amount = self::agentRevenueAmount($line)[0];
+                        $revenue[$who] += $amount;
                         $day = \Carbon\Carbon::parse($line->sold_at)->toDateString();
-                        $daily[$day] = ($daily[$day] ?? 0) + (float) $line->net_amount;
+                        $daily[$day] = ($daily[$day] ?? 0) + $amount;
                     }
                 }
             });
@@ -648,6 +649,40 @@ class WidgetQuery
         return null;
     }
 
+    /**
+     * Agent revenue for a line = what was paid by Cash, Card and Custom-Financial (the client's rule).
+     * Uses Zenoti's per-payment-type amounts when the line has them (fields such as cash / card /
+     * custom_financial, or a payments list); otherwise the line's net amount. Returns [amount, where from].
+     */
+    public static function agentRevenueAmount(object $line): array
+    {
+        $raw = is_array($line->raw) ? $line->raw : (json_decode((string) $line->raw, true) ?: []);
+        $isPaid = fn (string $name) => preg_match('/cash|card|custom|visa|master|amex/i', $name)
+            && ! preg_match('/gift|prepaid|cash[ _-]?back|loyalty|membership|package|count|date|_id$|^id$|type|tax/i', $name);
+        $sum = 0.0;
+        $used = [];
+        foreach (['payments', 'payment_details', 'payment_types', 'collections'] as $listKey) {
+            foreach (is_array($raw[$listKey] ?? null) ? $raw[$listKey] : [] as $p) {
+                $name = is_array($p) ? (string) (data_get($p, 'type') ?? data_get($p, 'payment_type') ?? data_get($p, 'name') ?? data_get($p, 'payment_type.name') ?? '') : '';
+                $amt = is_array($p) ? (data_get($p, 'amount') ?? data_get($p, 'value')) : null;
+                if ($name !== '' && is_numeric($amt) && $isPaid($name)) {
+                    $sum += (float) $amt;
+                    $used[$name] = true;
+                }
+            }
+        }
+        if (! $used) {
+            foreach ($raw as $key => $value) {
+                if (is_string($key) && is_numeric($value) && $isPaid($key)) {
+                    $sum += (float) $value;
+                    $used[$key] = true;
+                }
+            }
+        }
+
+        return $used ? [round($sum, 2), implode(' + ', array_keys($used))] : [(float) $line->net_amount, 'net amount'];
+    }
+
     /** The payment type Zenoti sent on the line, if any. */
     public static function paymentOf(object $line): ?string
     {
@@ -689,19 +724,20 @@ class WidgetQuery
             $why = ! in_array($l->created_by_employee_id, $ids, true)
                 ? ($l->created_by_employee_id ? 'Invoice created by someone else' : 'Invoice creator not matched to an employee')
                 : self::agentRevenueExclusion($l);
+            [$amount, $from] = self::agentRevenueAmount($l);
             if ($why === null) {
-                $total += (float) $l->net_amount;
+                $total += $amount;
             }
 
             return [optional($l->sold_at)->toDateTimeString(), $l->invoice_no, $l->item_name, $l->item_type, $l->status ?: null, self::paymentOf($l),
-                (float) $l->net_amount, $l->employee?->full_name, $creator ?? ($creatorName ?: null), $l->branch?->name, $why === null ? 'Yes' : 'No: '.$why];
+                $amount, $from, (float) $l->net_amount, $l->employee?->full_name, $creator ?? ($creatorName ?: null), $l->branch?->name, $why === null ? 'Yes' : 'No: '.$why];
         });
 
         return [
             'total' => $rows->count(),
             'shown' => $rows->count(),
             'note' => 'Counted: '.number_format($total, 2),
-            'columns' => [['Date', 'd'], ['Invoice', 's'], ['Item', 's'], ['Item type', 's'], ['Status', 's'], ['Payment', 's'], ['Amount', 'm'],
+            'columns' => [['Date', 'd'], ['Invoice', 's'], ['Item', 's'], ['Item type', 's'], ['Status', 's'], ['Payment', 's'], ['Amount', 'm'], ['Amount from', 's'], ['Net amount', 'm'],
                 ['Sold by', 's'], ['Invoice created by', 's'], ['Branch', 's'], ['Counted', 's']],
             'rows' => $rows->values()->all(),
             'guest_links' => [],

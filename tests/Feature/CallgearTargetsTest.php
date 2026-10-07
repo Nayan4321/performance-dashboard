@@ -63,6 +63,12 @@ class CallgearTargetsTest extends TestCase
         $this->assertStringContainsString('200,000', $rec['note']);
         $this->actingAs($admin)->get(route('dashboards.widget-records', [$d, $revW]).'?field=employee&key='.$a1->id.'&format=csv')->assertOk();
 
+        // Revenue = Cash + Card + Custom-Financial amounts when Zenoti sends them per payment type.
+        $amt = fn (array $raw, $net = 100) => \App\Support\WidgetQuery::agentRevenueAmount((object) ['raw' => $raw, 'net_amount' => $net]);
+        $this->assertSame([500.0, 'cash + card + custom_financial'], $amt(['cash' => 200, 'card' => '250', 'custom_financial' => 50, 'gift_card' => 900, 'prepaid_card' => 10, 'payment_type' => 'Card', 'card_count' => 3]));
+        $this->assertSame([70.0, 'Cash + Custom-Financial'], $amt(['payments' => [['type' => 'Cash', 'amount' => 40], ['type' => 'Gift Card', 'amount' => 60], ['type' => 'Custom-Financial', 'amount' => 30]]]));
+        $this->assertSame([100.0, 'net amount'], $amt(['payment_type' => 'Card']));
+
         $com = $get('Commission');
         $this->assertEquals(0.6, $com['rate']); // the whole group (lead included) made 900k
         $row = collect($com['rows'])->firstWhere('key', $ladies[1]->id);
