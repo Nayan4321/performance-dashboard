@@ -381,6 +381,27 @@ class RizzLayoutTest extends TestCase
         $this->assertSame(1, $lead->notifications()->count());
         $this->assertSame(0, $agent->notifications()->count());
 
+        // A dashboard whose "Visible to roles" ticks callgear-admin opens for her with its data.
+        $admin = Dashboard::where('name', \Database\Seeders\ManagementDashboardSeeder::NAME)->first()->load('widgets');
+        $admin->update(['visible_to_roles' => ['management', 'callgear-admin']]);
+        $this->assertContains($admin->name, Dashboard::visibleTo($lead->fresh())->pluck('name')->all());
+        $this->assertNotContains($admin->name, Dashboard::visibleTo($agent)->pluck('name')->all());
+        $this->actingAs($lead)->getJson(route('dashboards.widget-data', [$admin, $admin->widgets->first()]))->assertOk()->assertJsonMissing(['error' => 'Your role can only see CallGear data.']);
+
+        // She links agents to Callgear-tagged employees, and can open Integrations.
+        $this->actingAs($lead)->get(route('admin.users.create'))->assertSee('Mate Agent')->assertDontSee('Therapist Elsewhere');
+        $this->actingAs($lead)->get(route('admin.integrations.index'))->assertOk();
+
+        // Clicking one segment of "Call results by tag" lists that agent's calls with that tag.
+        $cgd = Dashboard::where('name', \Database\Seeders\CallgearPerformanceDashboardSeeder::NAME)->first();
+        $tagsWidget = $cgd->widgets()->create(['title' => 'Tags', 'type' => 'agent_tags', 'dataset' => 'calls', 'aggregate' => 'count', 'date_range' => 'this_month', 'width' => 12, 'position' => 98]);
+        foreach (['Booked', 'Enquiry, Booked', 'Enquiry'] as $i => $t) {
+            \App\Models\Call::create(['employee_id' => $mate->id, 'started_at' => now(), 'tags' => $t, 'callgear_id' => 'c'.$i, 'direction' => 'in']);
+        }
+        $res = $this->actingAs($lead)->getJson(route('dashboards.widget-records', [$cgd, $tagsWidget]).'?key='.$mate->id.'&field=employee&call_tag=Booked')->assertOk()->json();
+        $this->assertSame(2, $res['total']);
+        $tagsWidget->delete();
+
         $sales = Dashboard::where('name', \Database\Seeders\ManagementDashboardSeeder::NAME)->first()->load('widgets');
         $this->actingAs($agent)->get(route('dashboards.show', $sales))->assertRedirect(route('home'))->assertSessionHas('status');
         $cg = Dashboard::where('name', \Database\Seeders\CallgearPerformanceDashboardSeeder::NAME)->first()->load('widgets');

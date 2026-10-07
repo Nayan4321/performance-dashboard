@@ -205,7 +205,12 @@
             const o = apexBase(false);
             Object.assign(o, {
                 series,
-                chart: Object.assign(o.chart, { type: 'bar', stacked: true, height: Math.max(220, labels.length * 34 + 90) }),
+                chart: Object.assign(o.chart, { type: 'bar', stacked: true, height: Math.max(220, labels.length * 34 + 90),
+                    events: { dataPointSelection: (e, ctx, cfgp) => {
+                        const tag = series[cfgp.seriesIndex] && series[cfgp.seriesIndex].name, key = (data.keys || [])[cfgp.dataPointIndex];
+                        if (key === undefined) return;
+                        openRecords(card, { key: key, field: 'employee', call_tag: tag || '' }, labels[cfgp.dataPointIndex] + (tag ? ' · ' + tag : ''));
+                    } } }),
                 colors: SERIES,
                 plotOptions: { bar: { horizontal: true, borderRadius: 3, barHeight: '65%' } },
                 dataLabels: { enabled: true, formatter: v => v ? fmt(v) : '', style: { fontSize: '10px' } },

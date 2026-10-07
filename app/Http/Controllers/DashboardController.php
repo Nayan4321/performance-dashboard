@@ -87,7 +87,7 @@ class DashboardController extends Controller
         abort_unless($widget->dashboard_id === $dashboard->id && $dashboard->isVisibleTo($request->user()), 404);
         $f = $request->validate([
             'branch_id' => 'nullable|integer', 'employee_id' => 'nullable|integer', 'tag_id' => 'nullable|integer', 'from' => 'nullable|date', 'to' => 'nullable|date',
-            'key' => 'nullable|string|max:255', 'field' => 'nullable|string|max:40',
+            'key' => 'nullable|string|max:255', 'field' => 'nullable|string|max:40', 'call_tag' => 'nullable|string|max:120',
         ]);
         $field = $f['field'] ?? null;
         $ds = \App\Support\Datasets::get($widget->dataset);
@@ -95,6 +95,7 @@ class DashboardController extends Controller
             $field = null;
         }
         $q = new WidgetQuery($request->user(), $f['branch_id'] ?? null, $f['employee_id'] ?? null, $f['from'] ?? null, $f['to'] ?? null, $f['tag_id'] ?? null);
+        $q->callTag = $f['call_tag'] ?? null;
         $data = $q->records($widget, $request->has('key') ? (string) ($f['key'] ?? '') : null, $field);
 
         if ($request->query('format') === 'csv' && ! isset($data['error'])) {

@@ -33,6 +33,9 @@ class WidgetQuery
     /** Aggregates that only make sense on the sales table. */
     public const SALES_ONLY = ['invoices', 'atv', 'per_service', 'discount_pct', 'new_guests', 'returning_guests'];
 
+    /** Set by the records panel when a "Call results by tag" segment is clicked. */
+    public ?string $callTag = null;
+
     public function __construct(
         private User $user,
         private ?int $branchId = null,
@@ -65,7 +68,7 @@ class WidgetQuery
         if (! $ds) {
             return ['error' => 'Unknown dataset'];
         }
-        if ($this->user->callgearOnly() && ! $widget->allowedForCallgearOnly()) {
+        if ($this->user->callgearOnly() && ! $widget->allowedForCallgearOnly() && ! $widget->dashboard?->grantedByRole($this->user)) {
             return ['error' => 'Your role can only see CallGear data.'];
         }
 
@@ -173,7 +176,7 @@ class WidgetQuery
         'appointments' => [['t.start_time', 'Date', 'd'], ['g.first_name', 'Guest', 'guest'], ['t.service_name', 'Service', 's'], ['t.status', 'Status', 's'], ['e.first_name', 'Employee', 'emp'], ['b.name', 'Branch', 's'], ['t.price', 'Price', 'm']],
         'sales' => [['t.sold_at', 'Date', 'd'], ['t.invoice_no', 'Invoice', 's'], ['g.first_name', 'Guest', 'guest'], ['t.item_name', 'Item', 's'], ['t.category', 'Type', 's'], ['e.first_name', 'Employee', 'emp'], ['b.name', 'Branch', 's'], ['t.discount', 'Discount', 'm'], ['t.net_amount', 'Sales ex VAT', 'm']],
         'guests' => [['t.registered_at', 'Registered', 'd'], ['t.first_name', 'Guest', 'self'], ['t.phone', 'Phone', 's'], ['t.gender', 'Gender', 's'], ['b.name', 'Branch', 's']],
-        'calls' => [['t.started_at', 'Date', 'd'], ['t.direction', 'Direction', 's'], ['t.caller', 'From', 's'], ['t.callee', 'To', 's'], ['t.status', 'Status', 's'], ['g.first_name', 'Guest', 'guest'], ['e.first_name', 'Employee', 'emp'], ['b.name', 'Branch', 's'], ['t.duration_seconds', 'Seconds', 'n']],
+        'calls' => [['t.started_at', 'Date', 'd'], ['t.direction', 'Direction', 's'], ['t.caller', 'From', 's'], ['t.callee', 'To', 's'], ['t.status', 'Status', 's'], ['t.tags', 'Tags', 's'], ['g.first_name', 'Guest', 'guest'], ['e.first_name', 'Employee', 'emp'], ['b.name', 'Branch', 's'], ['t.duration_seconds', 'Seconds', 'n']],
         'leads' => [['t.lead_at', 'Date', 'd'], ['t.name', 'Name', 's'], ['t.phone', 'Phone', 's'], ['t.source', 'Source', 's'], ['t.channel', 'Channel', 's'], ['t.stage', 'Stage', 's'], ['e.first_name', 'Employee', 'emp'], ['b.name', 'Branch', 's'], ['t.value', 'Value', 'm']],
         'collections' => [['t.collected_at', 'Date', 'd'], ['t.invoice_no', 'Invoice', 's'], ['g.first_name', 'Guest', 'guest'], ['t.payment_type', 'Payment', 's'], ['e.first_name', 'Employee', 'emp'], ['b.name', 'Branch', 's'], ['t.amount', 'Amount', 'm']],
     ];
@@ -191,13 +194,19 @@ class WidgetQuery
         if (! $ds || ! isset(self::RECORD_COLUMNS[$table])) {
             return ['error' => 'This dataset has no record list'];
         }
-        if ($this->user->callgearOnly() && ! $widget->allowedForCallgearOnly()) {
+        if ($this->user->callgearOnly() && ! $widget->allowedForCallgearOnly() && ! $widget->dashboard?->grantedByRole($this->user)) {
             return ['error' => 'Your role can only see CallGear data.'];
         }
         if (in_array($widget->type, self::AGENT_REVENUE_TYPES, true)) {
             return $this->agentRevenueRecords($widget, $key);
         }
         $query = $this->baseQuery($widget, $ds);
+        if ($widget->type === 'agent_tags' && filled($this->callTag) && $table === 'calls') {
+            // One segment of "Call results by tag": calls of that agent carrying that tag (tags are comma separated).
+            $t = $this->callTag;
+            $query->where(fn ($w) => $w->where('calls.tags', $t)->orWhere('calls.tags', 'like', "$t,%")->orWhere('calls.tags', 'like', "%,$t")
+                ->orWhere('calls.tags', 'like', "%, $t")->orWhere('calls.tags', 'like', "%,$t,%")->orWhere('calls.tags', 'like', "%, $t,%"));
+        }
         $group = $field ?? $widget->group_by;
         if ($key !== null && $group) {
             [$expr] = $this->groupExpression($group, $ds);

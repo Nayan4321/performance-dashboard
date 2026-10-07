@@ -40,11 +40,17 @@ class Dashboard extends Model
             return false;
         }
 
-        if ($user->callgearOnly() && ! $this->isCallgearOnly()) {
+        if ($user->callgearOnly() && ! $this->isCallgearOnly() && ! $this->grantedByRole($user)) {
             return false;
         }
 
         return empty($this->visible_to_roles) || $user->hasAnyRole($this->visible_to_roles);
+    }
+
+    /** The dashboard's "Visible to roles" ticks one of the user's roles: an explicit grant, so CallGear-only limits don't apply. */
+    public function grantedByRole(User $user): bool
+    {
+        return ! empty($this->visible_to_roles) && $user->hasAnyRole($this->visible_to_roles);
     }
 
     /** Every widget is one CallGear-only users may see (CallGear data, or tagged-team employee data). */

@@ -130,9 +130,10 @@ class UserController extends Controller
             'callgearAdmin' => $actor->managesCallgearOnly(),
             'permissionLabels' => RolesAndPermissionsSeeder::PERMISSIONS,
             'modules' => Module::orderBy('name')->get(),
-            'employees' => Employee::where(fn ($q) => $q->whereIn('organization_id', $orgs->pluck('id'))->orWhereNull('organization_id'))
-                ->when($actor->managesCallgearOnly(), fn ($q) => $q->whereHas('tags', fn ($t) => $t->where('name', 'Callgear')))
-                ->orderBy('first_name')->get(),
+            // A Callgear admin links her agents to any Callgear-tagged employee (the team works across organizations).
+            'employees' => $actor->managesCallgearOnly()
+                ? Employee::whereKey(Employee::callgearIds() ?: [0])->orderBy('first_name')->get()
+                : Employee::whereIn('organization_id', $orgs->pluck('id'))->orWhereNull('organization_id')->orderBy('first_name')->get(),
         ];
     }
 
@@ -152,7 +153,7 @@ class UserController extends Controller
             'permissions' => 'array',
             'permissions.*' => 'exists:permissions,name',
             'modules' => 'array', // module_id => '' | allow | deny
-            'employee_id' => 'nullable|exists:employees,id',
+            'employee_id' => $actor->managesCallgearOnly() ? ['nullable', Rule::in(Employee::callgearIds())] : 'nullable|exists:employees,id',
         ]);
 
         if (! $actor->seesEverything()) {
