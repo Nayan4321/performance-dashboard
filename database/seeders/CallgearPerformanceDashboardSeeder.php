@@ -36,6 +36,7 @@ class CallgearPerformanceDashboardSeeder extends Seeder
             $this->addAfter($existing, self::REVENUE, self::GROUP_SPEC);
             $this->addAfter($existing, self::GROUP_SPEC['title'], self::TIER_REVENUE_SPEC);
             $this->addAfter($existing, 'Talk minutes per day vs target (120)', self::TAGS_SPEC);
+            $this->addAfter($existing, self::TAGS_SPEC['title'], self::BRANCH_SPEC);
 
             return;
         }
@@ -56,6 +57,7 @@ class CallgearPerformanceDashboardSeeder extends Seeder
             ['Talk minutes per day vs target (120)', 'agent_bars', 'count', null, null, 6, $targets + ['metric' => 'talk'], 'this_month'],
             ['Agent scorecard (who is high or low)', 'agent_table', 'count', null, null, 12, $targets, 'this_month'],
             ['Call results by tag', 'agent_tags', 'count', null, null, 12, [], 'this_month'],
+            [self::BRANCH_SPEC['title'], 'hbar', 'count', null, 'branch', 12, self::BRANCH_SPEC['options'], 'this_month'],
             [self::REVENUE, 'agent_revenue', 'sum', 'net_amount', null, 12, self::REVENUE_SPEC['options'], 'this_month', 'sales'],
             [self::GROUP_SPEC['title'], 'agent_group_target', 'sum', 'net_amount', null, 12, self::GROUP_SPEC['options'], 'this_month', 'sales'],
             [self::TIER_REVENUE_SPEC['title'], 'agent_tier_revenue', 'sum', 'net_amount', null, 12, self::TIER_REVENUE_SPEC['options'], 'this_month', 'sales'],
@@ -99,6 +101,10 @@ class CallgearPerformanceDashboardSeeder extends Seeder
 
     /** Calls per agent split by the result tag they put on them in CallGear. */
     private const TAGS_SPEC = ['title' => 'Call results by tag', 'type' => 'agent_tags', 'dataset' => 'calls', 'aggregate' => 'count', 'date_range' => 'this_month', 'width' => 12];
+
+    /** Calls per branch: the branch comes from the CallGear site, else the home branch of the client on the call. */
+    public const BRANCH_SPEC = ['title' => 'Calls by branch', 'type' => 'hbar', 'dataset' => 'calls', 'aggregate' => 'count', 'group_by' => 'branch',
+        'date_range' => 'this_month', 'width' => 12, 'options' => ['color' => 'info']];
 
     private function addAfter(Dashboard $d, string $afterTitle, array $spec): void
     {

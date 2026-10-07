@@ -282,6 +282,16 @@ class ZenotiSyncTest extends TestCase
         $this->assertSame((string) $m2->id, \App\Support\AutoSync::salesRound()); // back to the first
     }
 
+    public function test_callgear_calls_get_the_branch_of_the_client_on_the_call(): void
+    {
+        $org = \App\Models\Organization::firstOrCreate(['name' => 'GF']);
+        $m2 = Branch::create(['organization_id' => $org->id, 'name' => 'M2', 'zenoti_center_id' => 'c-m2', 'is_active' => true]);
+        $guest = \App\Models\Guest::create(['branch_id' => $m2->id, 'zenoti_id' => 'g-1', 'first_name' => 'Noora', 'phone' => '+971 50 651 3733']);
+        $call = app(\App\Services\CallGear\CallGearSource::class)->upsertCall(['id' => 77, 'contact_phone_number' => '971506513733', 'direction' => 'out', 'start_time' => now()->toDateTimeString()]);
+        $this->assertSame($m2->id, $call->branch_id);
+        $this->assertSame($guest->id, $call->guest_id);
+    }
+
     public function test_callgear_agents_match_partial_names_and_can_be_linked_by_hand(): void
     {
         config(['callgear.enabled' => true, 'callgear.access_token' => 'cg', 'callgear.base_url' => 'https://cg.test/v2.0']);

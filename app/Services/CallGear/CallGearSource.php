@@ -185,8 +185,13 @@ class CallGearSource implements PerformanceSource
         $counts[$call->exists ? 'updated' : 'created'] = ($counts[$call->exists ? 'updated' : 'created'] ?? 0) + 1;
         $employeeExt = data_get($row, 'employees.0.employee_id') ?? ($row['employee_id'] ?? null);
 
+        // The client on the call (CallGear's contact number), and through them a branch when the CallGear site isn't mapped to one.
+        $guest = $call->guest_id ? null : \App\Models\Complaint::guestForPhone($row['contact_phone_number'] ?? null);
+        $site = isset($row['site_id']) ? Branch::where('callgear_site_id', (string) $row['site_id'])->value('id') : null;
+
         $call->fill([
-            'branch_id' => isset($row['site_id']) ? Branch::where('callgear_site_id', (string) $row['site_id'])->value('id') : $call->branch_id,
+            'guest_id' => $call->guest_id ?? $guest?->id,
+            'branch_id' => $site ?? $call->branch_id ?? $guest?->branch_id,
             'employee_id' => $employeeExt ? Employee::where('callgear_id', (string) $employeeExt)->value('id') : $call->employee_id,
             'direction' => $row['direction'] ?? null,
             'status' => ! empty($row['is_lost']) ? 'missed' : 'answered',
