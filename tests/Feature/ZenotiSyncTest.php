@@ -523,8 +523,8 @@ class ZenotiSyncTest extends TestCase
                 ['invoice_no' => 'I2', 'item_type' => 'Product', 'sales_exc_tax' => 50],
             ], 'total' => 2])->whenEmpty(Http::response(['sales' => []])), '*' => Http::response([])]);
         $admin = User::role('super-admin')->first();
-        $this->actingAs($admin)->get(route('admin.integrations.test', ['call' => 'sales', 'center' => 'c1']))
-            ->assertOk()->assertSee('"counted_for_agents_total": 60')->assertSee('"amount_from": "cash"')->assertSee('gift_card')->assertSee('Not a service');
+        $res = $this->actingAs($admin)->get(route('admin.integrations.test', ['call' => 'sales', 'center' => 'c1']));
+        $res->assertOk()->assertSee('"counted_for_agents_total": 60')->assertSee('"amount_from": "cash"')->assertSee('gift_card')->assertSee('Not a service');
     }
 
     public function test_employee_filter_check_reports_which_parameter_narrows_rows(): void

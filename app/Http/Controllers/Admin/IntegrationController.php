@@ -73,7 +73,7 @@ class IntegrationController extends Controller
             : $client->sales((string) $center, $date, \Carbon\Carbon::parse($date)->addDay()->toDateString());
         $keys = collect($rows)->flatMap(fn ($r) => array_keys(\Illuminate\Support\Arr::dot($r)))->unique()->sort()->values();
         $money = $keys->filter(fn ($k) => preg_match('/pay|cash|card|custom|collect|amount|sale|price|total|tax|discount|redeem|gift|prepaid|package|member|close|date/i', $k))->values();
-        $lines = collect($rows)->map(function ($r) use ($money) {
+        $lines = collect($rows)->map(function ($r) use ($money, $date) {
             $m = \App\Services\Zenoti\ZenotiMapper::sale($r);
             $line = (object) ['raw' => $r, 'net_amount' => $m['net_amount'], 'item_type' => $m['item_type'], 'status' => $m['status']];
             [$amount, $from] = \App\Support\WidgetQuery::agentRevenueAmount($line);
@@ -135,7 +135,7 @@ class IntegrationController extends Controller
                 $error = $e->getMessage();
             }
         }
-        $json = $result === null ? null : json_encode($this->trimList($result), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $json = $result === null ? null : json_encode(($input['call'] ?? null) === 'sales' ? $result : $this->trimList($result), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
         $callgear = self::callgearStatus();
 
