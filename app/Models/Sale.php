@@ -28,4 +28,9 @@ class Sale extends Model
     {
         return $this->belongsTo(Employee::class);
     }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'created_by_employee_id');
+    }
 }

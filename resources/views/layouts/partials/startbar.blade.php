@@ -9,6 +9,7 @@
             [$perf && $full, 'employees.index', 'iconoir-group', 'Employees', 'employees.*'],
             [$perf && $full && Route::has('guests.index'), 'guests.index', 'iconoir-community', 'Guests', 'guests.*'],
             [$perf && $full && Route::has('appointments.index'), 'appointments.index', 'iconoir-calendar', 'Appointments', 'appointments.*'],
+            [$perf && $full && Route::has('invoices.index'), 'invoices.index', 'iconoir-page', 'Invoices', 'invoices.*'],
             [$perf && $full && Route::has('sales.index'), 'sales.index', 'iconoir-dollar-circle', 'Sales', 'sales.*'],
             [$perf && $full && Route::has('activity.index'), 'activity.index', 'iconoir-activity', 'Activity', 'activity.*'],
             [$perf && Route::has('calls.index'), 'calls.index', 'iconoir-phone', 'Calls', 'calls.*'],

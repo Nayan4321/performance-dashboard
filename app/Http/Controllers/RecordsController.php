@@ -67,6 +67,43 @@ class RecordsController extends Controller
         ]);
     }
 
+    /** One row per invoice, built from the sales lines already synced (no extra Zenoti calls). */
+    public function invoices(Request $request)
+    {
+        [$from, $to] = $this->period($request);
+        $own = $request->user()->visibleEmployeeId();
+        $base = $this->scoped(Sale::query(), $request, false)->whereNotNull('invoice_no')->where('invoice_no', '!=', '')
+            ->whereBetween('sold_at', [$from, $to])
+            ->when($own !== null, fn ($q) => $q->where(fn ($w) => $w->where('employee_id', $own)->orWhere('created_by_employee_id', $own)))
+            ->when($request->q, fn ($q, $s) => $q->where('invoice_no', 'like', "%$s%"));
+
+        $invoices = (clone $base)->selectRaw('invoice_no, branch_id, min(sold_at) as first_at, count(*) as line_count, sum(net_amount) as net')
+            ->groupBy('invoice_no', 'branch_id')->orderByDesc('first_at')->paginate(50)->withQueryString();
+
+        $lines = Sale::with(['employee', 'createdBy'])->whereIn('invoice_no', $invoices->pluck('invoice_no'))->get()
+            ->groupBy(fn ($l) => $l->invoice_no.'|'.$l->branch_id);
+        $branchNames = Branch::pluck('name', 'id');
+        foreach ($invoices as $inv) {
+            $items = $lines[$inv->invoice_no.'|'.$inv->branch_id] ?? collect();
+            $inv->branch_name = $branchNames[$inv->branch_id] ?? null;
+            $inv->amount = $items->sum(fn ($l) => \App\Support\WidgetQuery::agentRevenueAmount($l)[0]);
+            $inv->closed_at = $items->map(fn ($l) => \App\Support\WidgetQuery::closedAt($l))->max();
+            $inv->payment = $items->map(fn ($l) => \App\Support\WidgetQuery::paymentOf($l))->filter()->unique()->implode(', ');
+            $inv->status = $items->map(fn ($l) => $l->status ?: data_get($l->raw, 'invoice_status') ?: data_get($l->raw, 'status'))->filter()->unique()->implode(', ');
+            $inv->created_by = $items->map(fn ($l) => $l->createdBy?->full_name)->filter()->unique()->implode(', ');
+            $inv->sold_by = $items->map(fn ($l) => $l->employee?->full_name)->filter()->unique()->implode(', ');
+            $inv->items = $items->pluck('item_name')->filter()->implode(', ');
+        }
+
+        return view('records.invoices', [
+            'rows' => $invoices,
+            'count' => (clone $base)->distinct()->count('invoice_no'),
+            'branches' => $this->branches($request),
+            'from' => $from, 'to' => $to,
+            'column' => \App\Support\WidgetQuery::REVENUE_COLUMNS[\App\Support\WidgetQuery::revenueColumn()][0] ?? 'amount',
+        ]);
+    }
+
     public function calls(Request $request)
     {
         [$from, $to] = $this->period($request);

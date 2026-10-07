@@ -94,6 +94,7 @@ Route::middleware(['auth', 'active'])->group(function () {
             Route::get('guests', [RecordsController::class, 'guests'])->name('guests.index')->middleware('full-data');
             Route::get('appointments', [RecordsController::class, 'appointments'])->name('appointments.index')->middleware('full-data');
             Route::get('sales', [RecordsController::class, 'sales'])->name('sales.index')->middleware('full-data');
+            Route::get('invoices', [RecordsController::class, 'invoices'])->name('invoices.index')->middleware('full-data');
             Route::get('calls', [RecordsController::class, 'calls'])->name('calls.index');
             Route::get('employees/{employee}', [ActivityController::class, 'employee'])->name('employees.show')->middleware('full-data');
             Route::put('employees/{employee}/tags', [EmployeeController::class, 'updateTags'])->name('employees.tags')->middleware('permission:dashboards.manage');

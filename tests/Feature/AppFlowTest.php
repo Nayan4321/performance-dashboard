@@ -55,7 +55,7 @@ class AppFlowTest extends TestCase
             '/', route('dashboards.show', $dash), route('dashboards.create'), route('dashboards.edit', $dash),
             route('employees.index'), route('leads.index'), route('leads.create'),
             route('guests.index'), route('guests.index', ['period' => 'all', 'q' => 'a']), route('appointments.index', ['period' => 'last_90_days', 'status' => 'Serviced']),
-            route('sales.index', ['from' => now()->subYear()->toDateString(), 'category' => 'Product']),
+            route('sales.index', ['from' => now()->subYear()->toDateString(), 'category' => 'Product']), route('invoices.index', ['period' => 'last_90_days', 'q' => 'x']),
             route('admin.users.index'), route('admin.users.create'), route('admin.users.edit', User::where('email', 'stock@demo.test')->first()),
             route('admin.roles.index'), route('admin.organizations.index'), route('admin.modules.index'), route('admin.integrations.index'),
             route('inventory.orders.index'), route('inventory.orders.create'), route('inventory.orders.show', $order),
@@ -65,6 +65,19 @@ class AppFlowTest extends TestCase
             $res = $this->actingAs($admin)->get($url);
             $this->assertContains($res->status(), [200, 302], "$url returned {$res->status()}");
         }
+    }
+
+    public function test_invoices_page_groups_synced_sales_lines_per_invoice(): void
+    {
+        $branch = Branch::first();
+        $emp = \App\Models\Employee::create(['source' => 'zenoti', 'first_name' => 'Inv', 'last_name' => 'Maker']);
+        foreach ([['L1', 100, 105], ['L2', 50, 52.5]] as [$id, $exc, $inc]) {
+            \App\Models\Sale::create(['branch_id' => $branch->id, 'zenoti_id' => $id, 'invoice_no' => 'INV-77', 'item_name' => "Item $id", 'item_type' => 'Service',
+                'net_amount' => $exc, 'sold_at' => now(), 'created_by_employee_id' => $emp->id,
+                'raw' => ['sales_inc_tax' => $inc, 'payment_type' => 'Cash', 'invoice_status' => 'Closed']]);
+        }
+        $this->actingAs($this->admin())->get(route('invoices.index'))->assertOk()
+            ->assertSee('INV-77')->assertSee('Inv Maker')->assertSee('157.50')->assertSee('150.00');
     }
 
     public function test_widget_data_supports_all_types_and_filters(): void
