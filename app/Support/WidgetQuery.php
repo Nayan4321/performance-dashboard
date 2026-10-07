@@ -194,6 +194,9 @@ class WidgetQuery
         if ($this->user->callgearOnly() && ! $widget->allowedForCallgearOnly()) {
             return ['error' => 'Your role can only see CallGear data.'];
         }
+        if (in_array($widget->type, self::AGENT_REVENUE_TYPES, true)) {
+            return $this->agentRevenueRecords($widget, $key);
+        }
         $query = $this->baseQuery($widget, $ds);
         $group = $field ?? $widget->group_by;
         if ($key !== null && $group) {
@@ -616,29 +619,93 @@ class WidgetQuery
     /** Sales-Accrual rules: services only, closed invoices, paid by cash, card or custom-financial. */
     public static function countsAsAgentRevenue(object $line): bool
     {
+        return self::agentRevenueExclusion($line) === null;
+    }
+
+    /** Why a sales line is left out of agent revenue, or null when it counts. */
+    public static function agentRevenueExclusion(object $line): ?string
+    {
         $type = mb_strtolower((string) $line->item_type);
         if ($type !== '' && ! is_numeric($type) && ! str_contains($type, 'service')) {
-            return false;
+            return 'Not a service ('.$line->item_type.')';
         }
         $status = mb_strtolower((string) $line->status);
         if ($status !== '' && preg_match('/open|void|cancel|refund|delete/', $status)) {
-            return false;
+            return 'Invoice '.$line->status;
         }
-        $raw = is_array($line->raw) ? $line->raw : (json_decode((string) $line->raw, true) ?: []);
-        foreach ($raw as $key => $value) {
-            if (is_string($value) && preg_match('/payment/i', (string) $key) && ! preg_match('/date|id$/i', (string) $key)) {
-                $pay = mb_strtolower($value);
-                // Not counted in the report: gift / prepaid cards, packages, memberships, loyalty, cashback, cheques.
-                if (preg_match('/gift|prepaid|package|membership|loyalty|cash ?back|no payment|cheque|check|non[- ]?financial/', $pay)) {
-                    return false;
-                }
-                if ($pay !== '' && ! preg_match('/cash|card|custom[- ]?financial|visa|master|amex/', $pay)) {
-                    return false;
-                }
+        $pay = self::paymentOf($line);
+        if ($pay !== null) {
+            $p = mb_strtolower($pay);
+            // Not counted in the report: gift / prepaid cards, packages, memberships, loyalty, cashback, cheques.
+            if (preg_match('/gift|prepaid|package|membership|loyalty|cash ?back|no payment|cheque|check|non[- ]?financial/', $p)) {
+                return 'Paid by '.$pay;
+            }
+            if ($p !== '' && ! preg_match('/cash|card|custom[- ]?financial|visa|master|amex/', $p)) {
+                return 'Paid by '.$pay;
             }
         }
 
-        return true;
+        return null;
+    }
+
+    /** The payment type Zenoti sent on the line, if any. */
+    public static function paymentOf(object $line): ?string
+    {
+        $raw = is_array($line->raw) ? $line->raw : (json_decode((string) $line->raw, true) ?: []);
+        foreach ($raw as $key => $value) {
+            if (is_string($value) && preg_match('/payment/i', (string) $key) && ! preg_match('/date|id$/i', (string) $key)) {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The sales lines behind the agent revenue widgets, one per line, with who sold it, who created the
+     * invoice and whether it counts (and why not), so totals can be checked line by line against Zenoti.
+     * A clicked agent shows the invoices she created plus the ones she only sold (not counted).
+     */
+    private function agentRevenueRecords(DashboardWidget $widget, ?string $key): array
+    {
+        [$from, $to] = $this->dateRange($widget->date_range);
+        $agents = $this->agentEmployees($widget, [], true);
+        $ids = $key !== null && $key !== '' ? array_values(array_intersect([(int) $key], $agents->pluck('id')->all())) : $this->agentEmployees($widget)->pluck('id')->all();
+        $names = Employee::whereIn('id', \App\Models\Sale::query()->whereIn('created_by_employee_id', $ids ?: [0])->orWhereIn('employee_id', $ids ?: [0])->select('created_by_employee_id'))
+            ->get()->keyBy('id');
+        $lines = \App\Models\Sale::query()
+            ->with(['employee:id,first_name,last_name', 'branch:id,name'])
+            ->where(fn ($q) => $q->whereIn('created_by_employee_id', $ids ?: [0])->orWhereIn('employee_id', $ids ?: [0]))
+            ->when($from, fn ($q) => $q->where('sold_at', '>=', $from))
+            ->when($to, fn ($q) => $q->where('sold_at', '<=', $to))
+            ->when($this->user->visibleBranchIds() !== null, fn ($q) => $q->whereIn('branch_id', $this->user->visibleBranchIds() ?: [0]))
+            ->orderByDesc('sold_at')->limit(self::RECORD_LIMIT * 4)->get();
+        $total = 0.0;
+        $rows = $lines->map(function ($l) use ($ids, $names, &$total) {
+            $raw = is_array($l->raw) ? $l->raw : [];
+            $creatorName = data_get($raw, 'created_by.name') ?? (is_string($raw['created_by'] ?? null) ? $raw['created_by'] : null)
+                ?? trim((string) data_get($raw, 'created_by.first_name').' '.(string) data_get($raw, 'created_by.last_name'));
+            $creator = $l->created_by_employee_id ? $names->get($l->created_by_employee_id)?->full_name : null;
+            $why = ! in_array($l->created_by_employee_id, $ids, true)
+                ? ($l->created_by_employee_id ? 'Invoice created by someone else' : 'Invoice creator not matched to an employee')
+                : self::agentRevenueExclusion($l);
+            if ($why === null) {
+                $total += (float) $l->net_amount;
+            }
+
+            return [optional($l->sold_at)->toDateTimeString(), $l->invoice_no, $l->item_name, $l->item_type, $l->status ?: null, self::paymentOf($l),
+                (float) $l->net_amount, $l->employee?->full_name, $creator ?? ($creatorName ?: null), $l->branch?->name, $why === null ? 'Yes' : 'No: '.$why];
+        });
+
+        return [
+            'total' => $rows->count(),
+            'shown' => $rows->count(),
+            'note' => 'Counted: '.number_format($total, 2),
+            'columns' => [['Date', 'd'], ['Invoice', 's'], ['Item', 's'], ['Item type', 's'], ['Status', 's'], ['Payment', 's'], ['Amount', 'm'],
+                ['Sold by', 's'], ['Invoice created by', 's'], ['Branch', 's'], ['Counted', 's']],
+            'rows' => $rows->values()->all(),
+            'guest_links' => [],
+        ];
     }
 
     /**

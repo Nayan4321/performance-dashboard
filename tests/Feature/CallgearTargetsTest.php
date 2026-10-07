@@ -53,6 +53,16 @@ class CallgearTargetsTest extends TestCase
         $this->assertStringContainsString('(team lead)', implode(',', $rev['labels']));
         $this->assertEquals(850000, $rev['counted']);
 
+        // Clicking an agent lists every line she sold or invoiced, and whether it counts.
+        $revW = $d->widgets()->where('title', 'Revenue')->firstOrFail();
+        $rec = $this->actingAs($admin)->getJson(route('dashboards.widget-records', [$d, $revW]).'?field=employee&key='.$a1->id)->assertOk()->json();
+        $counted = collect($rec['rows'])->map(fn ($r) => end($r));
+        $this->assertSame(2, $counted->filter(fn ($c) => $c === 'Yes')->count());
+        $this->assertContains('No: Invoice creator not matched to an employee', $counted->all());
+        $this->assertContains('No: Paid by Gift Cards', $counted->all());
+        $this->assertStringContainsString('200,000', $rec['note']);
+        $this->actingAs($admin)->get(route('dashboards.widget-records', [$d, $revW]).'?field=employee&key='.$a1->id.'&format=csv')->assertOk();
+
         $com = $get('Commission');
         $this->assertEquals(0.6, $com['rate']); // the whole group (lead included) made 900k
         $row = collect($com['rows'])->firstWhere('key', $ladies[1]->id);

@@ -454,7 +454,7 @@
         panel.show();
         fetch(url, { headers: { Accept: 'application/json' } }).then(r => r.json()).then(res => {
             if (res.error) { bodyEl.innerHTML = '<div class="p-4 text-danger">' + esc(res.error) + '</div>'; document.getElementById('recordsSub').textContent = ''; return; }
-            document.getElementById('recordsSub').textContent = (card.dataset.source ? 'From ' + card.dataset.source + ' · ' : '') + res.total.toLocaleString() + ' record' + (res.total === 1 ? '' : 's') +
+            document.getElementById('recordsSub').textContent = (card.dataset.source ? 'From ' + card.dataset.source + ' · ' : '') + res.total.toLocaleString() + ' record' + (res.total === 1 ? '' : 's') + (res.note ? ' · ' + res.note : '') +
                 (res.total > res.shown ? ' · showing latest ' + res.shown.toLocaleString() + ' (Excel has the same limit)' : '');
             const cell = (v, f) => v === null || v === undefined ? '<span class="text-muted">—</span>' : f === 'm' ? fmt(v, true) : f === 'n' ? fmt(v, false) : f === 'd' ? esc(String(v).slice(0, 16).replace('T', ' ')) : esc(v);
             bodyEl.innerHTML = res.rows.length ? '<div class="table-responsive"><table class="table table-sm table-hover mb-0"><thead><tr>' +
