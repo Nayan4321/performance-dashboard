@@ -72,7 +72,7 @@ class IntegrationController extends Controller
             ? $client->salesAccrual((string) $center, $date, $date)
             : $client->sales((string) $center, $date, \Carbon\Carbon::parse($date)->addDay()->toDateString());
         $keys = collect($rows)->flatMap(fn ($r) => array_keys(\Illuminate\Support\Arr::dot($r)))->unique()->sort()->values();
-        $money = $keys->filter(fn ($k) => preg_match('/pay|cash|card|custom|collect|amount|sale|price|total|tax|discount|redeem|gift|prepaid|package|member/i', $k))->values();
+        $money = $keys->filter(fn ($k) => preg_match('/pay|cash|card|custom|collect|amount|sale|price|total|tax|discount|redeem|gift|prepaid|package|member|close|date/i', $k))->values();
         $lines = collect($rows)->map(function ($r) use ($money) {
             $m = \App\Services\Zenoti\ZenotiMapper::sale($r);
             $line = (object) ['raw' => $r, 'net_amount' => $m['net_amount'], 'item_type' => $m['item_type'], 'status' => $m['status']];
@@ -82,6 +82,7 @@ class IntegrationController extends Controller
                 'created_by' => $r['created_by'] ?? data_get($r, 'created_by.name') ?? $r['created_by_name'] ?? null, 'sold_by' => $r['sold_by'] ?? data_get($r, 'sold_by.name') ?? null,
                 'net_amount_used' => $m['net_amount'], 'agent_revenue' => \App\Support\WidgetQuery::agentRevenueExclusion($line) === null ? $amount : 0, 'amount_from' => $from,
                 'why_not_counted' => \App\Support\WidgetQuery::agentRevenueExclusion($line),
+                'counted_on' => \App\Support\WidgetQuery::closedAt((object) ['raw' => $r, 'sold_at' => $m['sold_at'] ?? $date])->toDateString(),
                 'money_fields' => collect(\Illuminate\Support\Arr::dot($r))->only($money->all())->all()];
         });
 

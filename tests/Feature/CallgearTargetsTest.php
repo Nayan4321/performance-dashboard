@@ -67,7 +67,18 @@ class CallgearTargetsTest extends TestCase
         $amt = fn (array $raw, $net = 100) => \App\Support\WidgetQuery::agentRevenueAmount((object) ['raw' => $raw, 'net_amount' => $net]);
         $this->assertSame([500.0, 'cash + card + custom_financial'], $amt(['cash' => 200, 'card' => '250', 'custom_financial' => 50, 'gift_card' => 900, 'prepaid_card' => 10, 'payment_type' => 'Card', 'card_count' => 3]));
         $this->assertSame([70.0, 'Cash + Custom-Financial'], $amt(['payments' => [['type' => 'Cash', 'amount' => 40], ['type' => 'Gift Card', 'amount' => 60], ['type' => 'Custom-Financial', 'amount' => 30]]]));
-        $this->assertSame([100.0, 'Sales (Exc. Tax)'], $amt(['payment_type' => 'Card', 'collected' => 105]));
+        // Default: the Sales (Inc. Tax) column the client's report totals.
+        $this->assertSame([105.0, 'Sales (Inc. Tax)'], $amt(['payment_type' => 'Card', 'sales_inc_tax' => 105, 'collected' => 105]));
+        $this->assertSame([100.0, 'Sales (Exc. Tax): Sales (Inc. Tax) not sent'], $amt(['payment_type' => 'Card']));
+        // "Custom - Qlub" is a custom-financial payment; gift / prepaid cards alone are not counted.
+        $line = fn (string $pay) => \App\Support\WidgetQuery::agentRevenueExclusion((object) ['item_type' => 'Service', 'status' => 'Closed', 'raw' => ['payment_type' => $pay]]);
+        $this->assertNull($line('Custom - Qlub'));
+        $this->assertNull($line('Card,Gift Card(GFS 01871)'));
+        $this->assertSame('Paid by Gift Card(GFS 01871)', $line('Gift Card(GFS 01871)'));
+        // The period follows the invoice closed date, like the report (sold 29 Sep, closed 5 Oct = October).
+        $sold = (object) ['sold_at' => '2026-09-29', 'raw' => ['sale_date' => '2026-09-29T00:00:00', 'invoice_closed_date' => '2026-10-05T12:00:00']];
+        $this->assertTrue(\App\Support\WidgetQuery::closedWithin($sold, '2026-10-01', '2026-10-31'));
+        $this->assertFalse(\App\Support\WidgetQuery::closedWithin($sold, '2026-09-01', '2026-09-30'));
         // The column the client totals can be switched on the widget form (shared by all revenue widgets).
         $rw = $d->widgets()->where('title', 'Revenue')->firstOrFail();
         $this->actingAs($admin)->put(route('widgets.update', [$d, $rw]), ['title' => 'Revenue', 'type' => 'agent_revenue', 'dataset' => 'sales', 'aggregate' => 'sum',

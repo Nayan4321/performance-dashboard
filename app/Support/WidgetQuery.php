@@ -463,20 +463,21 @@ class WidgetQuery
         $daily = [];
         \App\Models\Sale::query()
             ->whereIn('created_by_employee_id', $ids ?: [0])
-            ->when($from, fn ($q) => $q->where('sold_at', '>=', $from))
+            // The client's report goes by invoice closed date; a sale can close weeks after its sale date.
+            ->when($from, fn ($q) => $q->where('sold_at', '>=', CarbonImmutable::parse($from)->subDays(self::CLOSE_LAG_DAYS)))
             ->when($to, fn ($q) => $q->where('sold_at', '<=', $to))
             ->when($this->user->visibleBranchIds() !== null, fn ($q) => $q->whereIn('branch_id', $this->user->visibleBranchIds() ?: [0]))
             ->select(['id', 'employee_id', 'created_by_employee_id', 'item_type', 'status', 'net_amount', 'raw', 'sold_at'])
-            ->chunkById(1000, function ($lines) use (&$revenue, &$daily) {
+            ->chunkById(1000, function ($lines) use (&$revenue, &$daily, $from, $to) {
                 foreach ($lines as $line) {
-                    if (! self::countsAsAgentRevenue($line)) {
+                    if (! self::countsAsAgentRevenue($line) || ! self::closedWithin($line, $from, $to)) {
                         continue;
                     }
                     $who = $line->created_by_employee_id;
                     if ($who !== null && isset($revenue[$who])) {
                         $amount = self::agentRevenueAmount($line)[0];
                         $revenue[$who] += $amount;
-                        $day = \Carbon\Carbon::parse($line->sold_at)->toDateString();
+                        $day = self::closedAt($line)->toDateString();
                         $daily[$day] = ($daily[$day] ?? 0) + $amount;
                     }
                 }
@@ -617,6 +618,34 @@ class WidgetQuery
         ];
     }
 
+    /** How far before the period a sale date can be and still close inside it. */
+    public const CLOSE_LAG_DAYS = 60;
+
+    /** When the line's invoice was closed (the date the client's report filters on), else its sale date. */
+    public static function closedAt(object $line): CarbonImmutable
+    {
+        $raw = is_array($line->raw) ? $line->raw : (json_decode((string) $line->raw, true) ?: []);
+        foreach (['invoice_closed_date', 'invoice_closed_on', 'closed_date', 'invoice_close_date', 'closed_on', 'invoice.closed_date'] as $k) {
+            $v = data_get($raw, $k);
+            if (is_string($v) && $v !== '' && ! str_starts_with($v, '0001')) {
+                try {
+                    return CarbonImmutable::parse($v);
+                } catch (\Throwable) {
+                }
+            }
+        }
+
+        return CarbonImmutable::parse($line->sold_at);
+    }
+
+    public static function closedWithin(object $line, $from, $to): bool
+    {
+        $d = self::closedAt($line);
+
+        return (! $from || $d->greaterThanOrEqualTo(CarbonImmutable::parse($from)->startOfDay()))
+            && (! $to || $d->lessThanOrEqualTo(CarbonImmutable::parse($to)->endOfDay()));
+    }
+
     /** Sales-Accrual rules: services only, closed invoices, paid by cash, card or custom-financial. */
     public static function countsAsAgentRevenue(object $line): bool
     {
@@ -638,7 +667,7 @@ class WidgetQuery
         if ($pay !== null && trim($pay) !== '') {
             // Like the report's Payment Type filter: the line counts when any of its payment types is
             // Cash, Card or Custom-Financial (gift / prepaid cards, packages, memberships, loyalty don't).
-            $ok = collect(preg_split('/\s*[,;\/|]\s*/', mb_strtolower($pay)))->contains(fn ($p) => preg_match('/cash|card|custom[- ]?financial|visa|master|amex/', $p)
+            $ok = collect(preg_split('/\s*[,;\/|]\s*/', mb_strtolower($pay)))->contains(fn ($p) => preg_match('/cash|card|custom|visa|master|amex/', $p)
                 && ! preg_match('/gift|prepaid|package|membership|loyalty|cash ?back|no payment|cheque|check|non[- ]?financial/', $p));
             if (! $ok) {
                 return 'Paid by '.$pay;
@@ -672,7 +701,8 @@ class WidgetQuery
         }
         if (! $used) {
             foreach ($raw as $key => $value) {
-                if (is_string($key) && is_numeric($value) && $isPaid($key)) {
+                // Only fields that are plainly a per-payment-type amount (Zenoti's flat file sends payment_type text instead).
+                if (is_string($key) && is_numeric($value) && preg_match('/^(cash|card|custom|custom_financial|cash_amount|card_amount|custom_financial_amount)$/i', $key)) {
                     $sum += (float) $value;
                     $used[$key] = true;
                 }
@@ -707,9 +737,10 @@ class WidgetQuery
 
     public static function revenueColumn(): string
     {
-        $c = (string) \App\Models\Setting::get('callgear.revenue_column', 'sales_exc_tax');
+        // The client totals Sales (Inc. Tax) (Nayan, 2026-10-07).
+        $c = (string) \App\Models\Setting::get('callgear.revenue_column', 'sales_inc_tax');
 
-        return array_key_exists($c, self::REVENUE_COLUMNS) ? $c : 'sales_exc_tax';
+        return array_key_exists($c, self::REVENUE_COLUMNS) ? $c : 'sales_inc_tax';
     }
 
     /** The payment type Zenoti sent on the line, if any. */
@@ -740,10 +771,11 @@ class WidgetQuery
         $lines = \App\Models\Sale::query()
             ->with(['employee:id,first_name,last_name', 'branch:id,name'])
             ->where(fn ($q) => $q->whereIn('created_by_employee_id', $ids ?: [0])->orWhereIn('employee_id', $ids ?: [0]))
-            ->when($from, fn ($q) => $q->where('sold_at', '>=', $from))
+            ->when($from, fn ($q) => $q->where('sold_at', '>=', CarbonImmutable::parse($from)->subDays(self::CLOSE_LAG_DAYS)))
             ->when($to, fn ($q) => $q->where('sold_at', '<=', $to))
             ->when($this->user->visibleBranchIds() !== null, fn ($q) => $q->whereIn('branch_id', $this->user->visibleBranchIds() ?: [0]))
-            ->orderByDesc('sold_at')->limit(self::RECORD_LIMIT * 4)->get();
+            ->orderByDesc('sold_at')->limit(self::RECORD_LIMIT * 4)->get()
+            ->filter(fn ($l) => self::closedWithin($l, $from, $to))->values();
         $total = 0.0;
         $rows = $lines->map(function ($l) use ($ids, $names, &$total) {
             $raw = is_array($l->raw) ? $l->raw : [];
@@ -758,7 +790,7 @@ class WidgetQuery
                 $total += $amount;
             }
 
-            return [optional($l->sold_at)->toDateTimeString(), $l->invoice_no, $l->item_name, $l->item_type, $l->status ?: null, self::paymentOf($l),
+            return [self::closedAt($l)->toDateString(), optional($l->sold_at)->toDateString(), $l->invoice_no, $l->item_name, $l->item_type, $l->status ?: null, self::paymentOf($l),
                 $amount, $from, (float) $l->net_amount, $l->employee?->full_name, $creator ?? ($creatorName ?: null), $l->branch?->name, $why === null ? 'Yes' : 'No: '.$why];
         });
 
@@ -766,7 +798,7 @@ class WidgetQuery
             'total' => $rows->count(),
             'shown' => $rows->count(),
             'note' => 'Counted: '.number_format($total, 2),
-            'columns' => [['Date', 'd'], ['Invoice', 's'], ['Item', 's'], ['Item type', 's'], ['Status', 's'], ['Payment', 's'], ['Amount', 'm'], ['Amount from', 's'], ['Net amount', 'm'],
+            'columns' => [['Invoice closed', 'd'], ['Sale date', 'd'], ['Invoice', 's'], ['Item', 's'], ['Item type', 's'], ['Status', 's'], ['Payment', 's'], ['Amount', 'm'], ['Amount from', 's'], ['Net amount', 'm'],
                 ['Sold by', 's'], ['Invoice created by', 's'], ['Branch', 's'], ['Counted', 's']],
             'rows' => $rows->values()->all(),
             'guest_links' => [],
