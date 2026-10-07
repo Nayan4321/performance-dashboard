@@ -46,7 +46,8 @@ class WidgetQuery
     private function dataset(DashboardWidget $widget): ?array
     {
         $ds = Datasets::get($widget->dataset);
-        if ($ds && $ds['table'] === 'sales' && $widget->option('credit') === 'created_by') {
+        // Call agents' revenue widgets always credit the invoice creator (how the client's team counts it).
+        if ($ds && $ds['table'] === 'sales' && ($widget->option('credit') === 'created_by' || in_array($widget->type, self::AGENT_REVENUE_TYPES, true))) {
             $ds['employee'] = 'created_by_employee_id';
         }
         // Appointments credited to whoever booked them, counted by booking date.
@@ -80,7 +81,7 @@ class WidgetQuery
         if ($widget->type === 'agent_table' || $widget->type === 'agent_bars') {
             return $this->agentScores($widget, $ds);
         }
-        if (in_array($widget->type, ['agent_revenue', 'agent_commission', 'agent_group_target', 'agent_tier_revenue'], true)) {
+        if (in_array($widget->type, self::AGENT_REVENUE_TYPES, true)) {
             return $this->agentRevenue($widget);
         }
         if ($widget->type === 'agent_tags') {
@@ -444,7 +445,7 @@ class WidgetQuery
     /**
      * Agent revenue the way the client's Zenoti Sales-Accrual report counts it: service lines of closed
      * invoices paid by cash, card or custom-financial, by sale date. A line counts for the agent who
-     * sold it, else the agent who entered it. The team target (option team_target, 800,000) is split
+     * created the invoice (not who sold it), as the client's team counts it. The team target (option team_target, 800,000) is split
      * equally between the agents; anyone tagged "Team lead" (option lead_tag) is shown but not in the split.
      * agent_commission adds the tier the team total reached (option tiers: [[from, percent], ...]).
      */
@@ -458,7 +459,7 @@ class WidgetQuery
         $revenue = array_fill_keys($ids, 0.0);
         $daily = [];
         \App\Models\Sale::query()
-            ->where(fn ($q) => $q->whereIn('employee_id', $ids ?: [0])->orWhereIn('created_by_employee_id', $ids ?: [0]))
+            ->whereIn('created_by_employee_id', $ids ?: [0])
             ->when($from, fn ($q) => $q->where('sold_at', '>=', $from))
             ->when($to, fn ($q) => $q->where('sold_at', '<=', $to))
             ->when($this->user->visibleBranchIds() !== null, fn ($q) => $q->whereIn('branch_id', $this->user->visibleBranchIds() ?: [0]))
@@ -468,7 +469,7 @@ class WidgetQuery
                     if (! self::countsAsAgentRevenue($line)) {
                         continue;
                     }
-                    $who = $line->employee_id !== null && isset($revenue[$line->employee_id]) ? $line->employee_id : $line->created_by_employee_id;
+                    $who = $line->created_by_employee_id;
                     if ($who !== null && isset($revenue[$who])) {
                         $revenue[$who] += (float) $line->net_amount;
                         $day = \Carbon\Carbon::parse($line->sold_at)->toDateString();
@@ -564,6 +565,8 @@ class WidgetQuery
             'lead' => $rows->pluck('lead')->all(),
         ];
     }
+
+    public const AGENT_REVENUE_TYPES = ['agent_revenue', 'agent_commission', 'agent_group_target', 'agent_tier_revenue'];
 
     public const COMMISSION_TIERS = [[700000, 0.4], [800000, 0.5], [900000, 0.6], [1000000, 0.7]];
 

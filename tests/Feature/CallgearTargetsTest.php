@@ -31,13 +31,14 @@ class CallgearTargetsTest extends TestCase
         $kawther->tags()->attach([$callgear, $lead]);
         $a1 = $ladies[0];
         $line = fn (array $x) => Sale::create($x + ['zenoti_id' => uniqid(), 'sold_at' => now(), 'item_type' => 'Service', 'status' => 'Closed', 'net_amount' => 100000]);
-        $line(['employee_id' => $a1->id, 'raw' => ['payment_type' => 'Card']]);                 // counts
-        $line(['created_by_employee_id' => $a1->id, 'raw' => ['payment_type' => 'Cash']]);     // counts (entered by her)
-        $line(['employee_id' => $a1->id, 'item_type' => 'Product']);                           // not a service
-        $line(['employee_id' => $a1->id, 'status' => 'Open']);                                 // not closed
-        $line(['employee_id' => $a1->id, 'raw' => ['payment_type' => 'Gift Cards']]);          // excluded payment
-        $line(['employee_id' => $ladies[1]->id, 'raw' => ['payment_type' => 'Custom-Financial'], 'net_amount' => 650000]);
-        $line(['employee_id' => $kawther->id, 'net_amount' => 50000]);                          // lead: shown, not in split
+        $line(['created_by_employee_id' => $a1->id, 'raw' => ['payment_type' => 'Card']]);                 // counts
+        $line(['created_by_employee_id' => $a1->id, 'employee_id' => $ladies[3]->id, 'raw' => ['payment_type' => 'Cash']]); // counts for her (she created the invoice)
+        $line(['employee_id' => $a1->id, 'created_by_employee_id' => null]);                   // sold by her, invoice not hers: not counted
+        $line(['created_by_employee_id' => $a1->id, 'item_type' => 'Product']);                           // not a service
+        $line(['created_by_employee_id' => $a1->id, 'status' => 'Open']);                                 // not closed
+        $line(['created_by_employee_id' => $a1->id, 'raw' => ['payment_type' => 'Gift Cards']]);          // excluded payment
+        $line(['created_by_employee_id' => $ladies[1]->id, 'raw' => ['payment_type' => 'Custom-Financial'], 'net_amount' => 650000]);
+        $line(['created_by_employee_id' => $kawther->id, 'net_amount' => 50000]);                          // lead: shown, not in split
 
         $d = Dashboard::where('name', CallgearPerformanceDashboardSeeder::NAME)->firstOrFail();
         $admin = User::where('email', 'admin@your-domain.com')->first() ?? User::first();
