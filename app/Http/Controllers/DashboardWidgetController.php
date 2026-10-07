@@ -63,6 +63,8 @@ class DashboardWidgetController extends Controller
             'options.lead_tag' => 'nullable|string|max:60',
             'options.tiers_text' => 'nullable|string|max:1000',
             'options.tags_text' => 'nullable|string|max:1000',
+            'options.roles' => 'nullable|array',
+            'options.roles.*' => 'string|exists:roles,name',
             'options.amount_column' => ['nullable', Rule::in(array_keys(WidgetQuery::REVENUE_COLUMNS))],
         ]);
         // One amount column for all Callgear revenue widgets, so they always agree.
@@ -81,7 +83,7 @@ class DashboardWidgetController extends Controller
         }
         $data['options'] = $opts;
         $data['options'] = array_filter(
-            array_intersect_key($data['options'] ?? [], array_flip(['icon', 'color', 'target', 'target_calls', 'target_minutes', 'metric', 'all_employees', 'team_target', 'lead_tag', 'tiers', 'tags'])),
+            array_intersect_key($data['options'] ?? [], array_flip(['icon', 'color', 'target', 'target_calls', 'target_minutes', 'metric', 'all_employees', 'team_target', 'lead_tag', 'tiers', 'tags', 'roles'])),
             fn ($v) => $v !== null && $v !== ''
         ) ?: null;
 

@@ -77,6 +77,14 @@ class DashboardWidget extends Model
         };
     }
 
+    /** Option roles: only these roles see the widget (none = everyone who sees the dashboard). Super admin and management see all. */
+    public function isVisibleTo(User $user): bool
+    {
+        $roles = (array) $this->option('roles', []);
+
+        return ! $roles || $user->seesEverything() || $user->hasAnyRole($roles);
+    }
+
     public function option(string $key, $default = null)
     {
         return ($this->options ?? [])[$key] ?? $default;

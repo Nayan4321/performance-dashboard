@@ -48,8 +48,11 @@ class DashboardController extends Controller
             ->when($dashboard->organization_id, fn ($q) => $q->where('organization_id', $dashboard->organization_id))
             ->orderBy('name')->get();
 
+        $dashboard->load('widgets');
+        $dashboard->setRelation('widgets', $dashboard->widgets->filter(fn ($w) => $w->isVisibleTo($user))->values());
+
         return view('dashboards.show', [
-            'dashboard' => $dashboard->load('widgets'),
+            'dashboard' => $dashboard,
             'dashboards' => Dashboard::visibleTo($user),
             'branches' => $branches,
             'canFilterEmployees' => $user->visibleEmployeeId() === null,
@@ -60,7 +63,7 @@ class DashboardController extends Controller
 
     public function widgetData(Request $request, Dashboard $dashboard, DashboardWidget $widget)
     {
-        abort_unless($widget->dashboard_id === $dashboard->id && $dashboard->isVisibleTo($request->user()), 404);
+        abort_unless($widget->dashboard_id === $dashboard->id && $dashboard->isVisibleTo($request->user()) && $widget->isVisibleTo($request->user()), 404);
         $filters = $request->validate([
             'branch_id' => 'nullable|integer',
             'employee_id' => 'nullable|integer',
@@ -84,7 +87,7 @@ class DashboardController extends Controller
     /** Rows behind a widget or one bar/slice of it; ?format=csv downloads them. */
     public function widgetRecords(Request $request, Dashboard $dashboard, DashboardWidget $widget)
     {
-        abort_unless($widget->dashboard_id === $dashboard->id && $dashboard->isVisibleTo($request->user()), 404);
+        abort_unless($widget->dashboard_id === $dashboard->id && $dashboard->isVisibleTo($request->user()) && $widget->isVisibleTo($request->user()), 404);
         $f = $request->validate([
             'branch_id' => 'nullable|integer', 'employee_id' => 'nullable|integer', 'tag_id' => 'nullable|integer', 'from' => 'nullable|date', 'to' => 'nullable|date',
             'key' => 'nullable|string|max:255', 'field' => 'nullable|string|max:40', 'call_tag' => 'nullable|string|max:120',

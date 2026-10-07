@@ -54,6 +54,13 @@
                 <input name="options[tags_text]" class="form-control form-control-sm" value="{{ implode(', ', (array) $widget->option('tags', [])) }}" placeholder="Outgoing refreshment call, Outgoing new sale, Incoming booking call"></div>
             <div class="col-md-3 opt-metric"><label class="form-label small">Chart shows</label>
                 <select name="options[metric]" class="form-select form-select-sm"><option value="calls">Calls per day</option><option value="talk" @selected($widget->option('metric') === 'talk')>Talk minutes per day</option></select></div>
+            @if(isset($roles))
+            <div class="col-12"><label class="form-label small mb-1">Visible to roles <span class="text-muted">(none ticked = everyone who sees this dashboard)</span></label>
+                <div class="d-flex flex-wrap gap-3">@foreach($roles as $r)
+                    <div class="form-check form-check-inline small mb-0"><input class="form-check-input" type="checkbox" name="options[roles][]" value="{{ $r }}" id="wr-{{ $widget->id ?? 'new' }}-{{ $r }}" @checked(in_array($r, (array) $widget->option('roles', [])))>
+                        <label class="form-check-label" for="wr-{{ $widget->id ?? 'new' }}-{{ $r }}">{{ $r }}</label></div>
+                @endforeach</div></div>
+            @endif
         </div>
 
         @foreach($filters as $i => $f)

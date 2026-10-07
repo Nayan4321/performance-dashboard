@@ -913,8 +913,16 @@ class WidgetQuery
         // Tag filters (the dashboard's own tag and the filter bar): only rows of employees carrying the tag.
         // Datasets without an employee column are left as they are.
         if ($ds['employee']) {
+            // The filter-bar tag also matches who created the row (booked the appointment / entered the invoice),
+            // so a "Callgear" filter on a provider-based dashboard shows what the call team created.
+            $also = $ds['employee'] === 'employee_id' ? ['appointments' => 'booked_by_employee_id', 'sales' => 'created_by_employee_id'][$t] ?? null : null;
             foreach ($this->tagIds($widget) as $tag) {
-                $query->whereIn("$t.{$ds['employee']}", DB::table('employee_tag')->select('employee_id')->where('tag_id', $tag));
+                $tagged = DB::table('employee_tag')->select('employee_id')->where('tag_id', $tag);
+                if ($also && $tag === $this->tagId) {
+                    $query->where(fn ($w) => $w->whereIn("$t.{$ds['employee']}", $tagged)->orWhereIn("$t.$also", clone $tagged));
+                } else {
+                    $query->whereIn("$t.{$ds['employee']}", $tagged);
+                }
             }
         }
 

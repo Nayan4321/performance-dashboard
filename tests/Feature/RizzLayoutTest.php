@@ -388,6 +388,24 @@ class RizzLayoutTest extends TestCase
         $this->assertNotContains($admin->name, Dashboard::visibleTo($agent)->pluck('name')->all());
         $this->actingAs($lead)->getJson(route('dashboards.widget-data', [$admin, $admin->widgets->first()]))->assertOk()->assertJsonMissing(['error' => 'Your role can only see CallGear data.']);
 
+        // The filter-bar tag also counts appointments the tagged staff booked (not only those they served).
+        \App\Models\Appointment::create(['branch_id' => $branch->id, 'zenoti_id' => 'AP-CG', 'service_name' => 'Facial', 'status' => 'Serviced',
+            'start_time' => now(), 'booked_at' => now(), 'employee_id' => $other->id, 'booked_by_employee_id' => $mate->id, 'price' => 100]);
+        $countWidget = $admin->widgets()->create(['title' => 'Appts', 'type' => 'kpi', 'dataset' => 'appointments', 'aggregate' => 'count', 'date_range' => 'this_month', 'width' => 3, 'position' => 97]);
+        $res = $this->actingAs($this->admin())->getJson(route('dashboards.widget-data', [$admin, $countWidget]).'?tag_id='.$tag[0])->assertOk()->json();
+        $this->assertEquals(1, $res['value']);
+
+        // Widgets can be limited to roles: the agent's dashboard hides one ticked for callgear-admin only.
+        $cgd0 = Dashboard::where('name', \Database\Seeders\CallgearPerformanceDashboardSeeder::NAME)->first()->load('widgets');
+        $hidden = $cgd0->widgets->first();
+        $hidden->update(['options' => array_merge((array) $hidden->options, ['roles' => ['callgear-admin']])]);
+        $this->actingAs($agent)->getJson(route('dashboards.widget-data', [$cgd0, $hidden]))->assertNotFound();
+        $this->actingAs($lead)->getJson(route('dashboards.widget-data', [$cgd0, $hidden]))->assertOk();
+        $this->actingAs($this->admin())->put(route('widgets.update', [$cgd0, $hidden]), ['title' => $hidden->title, 'type' => $hidden->type, 'dataset' => $hidden->dataset,
+            'aggregate' => $hidden->aggregate, 'date_range' => $hidden->date_range, 'width' => $hidden->width, 'position' => $hidden->position, 'options' => ['roles' => ['management']]])->assertRedirect();
+        $this->assertSame(['management'], $hidden->fresh()->option('roles'));
+        $hidden->update(['options' => null]);
+
         // She links agents to Callgear-tagged employees, and can open Integrations.
         $this->actingAs($lead)->get(route('admin.users.create'))->assertSee('Mate Agent')->assertDontSee('Therapist Elsewhere');
         $this->actingAs($lead)->get(route('admin.integrations.index'))->assertOk();
