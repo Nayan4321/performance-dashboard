@@ -80,6 +80,37 @@ class AppFlowTest extends TestCase
             ->assertSee('INV-77')->assertSee('Inv Maker')->assertSee('157.50')->assertSee('150.00');
     }
 
+    public function test_callgear_admin_manages_only_callgear_agents_and_their_allowed_permissions(): void
+    {
+        $org = \App\Models\Organization::first();
+        $lead = User::create(['name' => 'CG Lead', 'email' => 'cglead@demo.test', 'password' => 'password', 'organization_id' => $org->id, 'is_active' => true]);
+        $lead->assignRole('callgear-admin');
+        $other = User::where('email', 'stock@demo.test')->first();
+
+        $this->actingAs($lead)->get(route('admin.users.index'))->assertOk()->assertDontSee('stock@demo.test');
+        $this->actingAs($lead)->get(route('admin.users.edit', $other))->assertForbidden();
+        $this->actingAs($lead)->get(route('admin.users.create'))->assertOk()->assertSee('complaints.manage')->assertDontSee('roles.manage');
+
+        $this->actingAs($lead)->post(route('admin.users.store'), [
+            'name' => 'Agent One', 'email' => 'agent1@demo.test', 'password' => 'password123', 'is_active' => 1,
+            'roles' => ['callgear-agent'], 'permissions' => ['complaints.manage', 'users.manage'],
+        ])->assertRedirect(route('admin.users.index'));
+        $agent = User::where('email', 'agent1@demo.test')->first();
+        $this->assertTrue($agent->hasRole('callgear-agent'));
+        $this->assertSame($org->id, $agent->organization_id);
+        $this->assertTrue($agent->hasDirectPermission('complaints.manage'));
+        $this->assertFalse($agent->can('users.manage'));
+
+        // She cannot hand out other roles, and her agents appear in her list.
+        $this->actingAs($lead)->post(route('admin.users.store'), ['name' => 'X', 'email' => 'x@demo.test', 'password' => 'password123', 'roles' => ['management']])->assertSessionHasErrors('roles.0');
+        $this->actingAs($lead)->get(route('admin.users.index'))->assertSee('agent1@demo.test');
+        $this->actingAs($lead)->put(route('admin.users.update', $agent), ['name' => 'Agent One', 'email' => 'agent1@demo.test', 'is_active' => 0, 'roles' => []])->assertRedirect();
+        $agent->refresh();
+        $this->assertFalse((bool) $agent->is_active);
+        $this->assertTrue($agent->hasRole('callgear-agent'));
+        $this->assertFalse($agent->hasDirectPermission('complaints.manage'));
+    }
+
     public function test_widget_data_supports_all_types_and_filters(): void
     {
         $admin = $this->admin();

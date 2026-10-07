@@ -20,7 +20,7 @@
 
             <div class="card mt-4"><div class="card-body">
                 <h2 class="h6">Scope</h2>
-                <div class="mb-2"><label class="form-label">Organization</label>
+                <div class="mb-2 {{ ($callgearAdmin ?? false) ? 'd-none' : '' }}"><label class="form-label">Organization</label>
                     <select name="organization_id" class="form-select"><option value="">—</option>@foreach($organizations as $o)<option value="{{ $o->id }}" @selected(old('organization_id', $user->organization_id) == $o->id)>{{ $o->name }}</option>@endforeach</select></div>
                 <div class="mb-2"><label class="form-label">Branch</label>
                     <select name="branch_id" class="form-select"><option value="">—</option>@foreach($branches as $b)<option value="{{ $b->id }}" @selected(old('branch_id', $user->branch_id) == $b->id)>{{ $b->name }}</option>@endforeach</select></div>
@@ -37,6 +37,7 @@
                 @endforeach
             </div></div>
 
+            @unless($callgearAdmin ?? false)
             <div class="card mt-4"><div class="card-body">
                 <h2 class="h6">Module visibility <span class="text-muted small fw-normal">(default follows the organization)</span></h2>
                 @foreach($modules as $m)
@@ -52,16 +53,18 @@
                     </div>
                 @endforeach
             </div></div>
+            @endunless
 
-            @can('roles.manage')
+            @if(auth()->user()->can('roles.manage') || ($callgearAdmin ?? false))
             <div class="card mt-4"><div class="card-body">
                 <h2 class="h6">Extra permissions <span class="text-muted small fw-normal">(on top of the roles)</span></h2>
+                @if($callgearAdmin ?? false)<p class="small text-muted">Every Callgear agent can open the Callgear dashboards and calls. These add more:</p>@endif
                 @foreach($permissions as $p)
                     <div class="form-check"><input class="form-check-input" type="checkbox" name="permissions[]" value="{{ $p }}" id="p-{{ $p }}" @checked(in_array($p, old('permissions', $user->exists ? $user->getDirectPermissions()->pluck('name')->all() : [])))>
                         <label class="form-check-label small" for="p-{{ $p }}"><code>{{ $p }}</code> <span class="text-muted">{{ $permissionLabels[$p] ?? '' }}</span></label></div>
                 @endforeach
             </div></div>
-            @endcan
+            @endif
         </div>
     </div>
     <div class="mt-4 d-flex gap-2">

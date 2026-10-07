@@ -47,6 +47,9 @@ class RolesAndPermissionsSeeder extends Seeder
         ],
         'employee' => ['dashboards.view'],
         'callgear-agent' => ['dashboards.view', 'callgear.only', 'performance.view-all-branches', 'performance.view-branch'],
+        // Callgear team admin: CallGear data only, plus logins and permissions of the callgear-agent users.
+        'callgear-admin' => ['dashboards.view', 'callgear.only', 'performance.view-all-branches', 'performance.view-branch',
+            'users.manage', 'guides.manage', 'complaints.manage'],
         'stock-manager' => [
             'inventory.access', 'inventory.products.manage', 'inventory.orders.approve', 'inventory.orders.view-all',
             'inventory.invoices.generate',

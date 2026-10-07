@@ -81,11 +81,22 @@ class UserController extends Controller
 
     private function scoped(User $actor)
     {
+        if ($actor->managesCallgearOnly()) {
+            return User::role(User::CALLGEAR_AGENT)->whereKeyNot($actor->id)
+                ->whereDoesntHave('roles', fn ($r) => $r->where('name', '!=', User::CALLGEAR_AGENT))
+                ->where('organization_id', $actor->organization_id);
+        }
+
         return User::query()->when(! $actor->seesEverything(), fn ($q) => $q->where('organization_id', $actor->organization_id));
     }
 
     private function authorizeTarget(User $actor, User $target): void
     {
+        if ($actor->managesCallgearOnly()) {
+            abort_unless($this->scoped($actor)->whereKey($target->id)->exists(), 403);
+
+            return;
+        }
         if ($actor->seesEverything()) {
             abort_if($target->isSuperAdmin() && ! $actor->isSuperAdmin(), 403);
 
@@ -97,6 +108,10 @@ class UserController extends Controller
     /** Only super admin can hand out super-admin and main-admin; only full-access admins can hand out management. */
     private function assignableRoles(User $actor)
     {
+        if ($actor->managesCallgearOnly()) {
+            return collect([User::CALLGEAR_AGENT]);
+        }
+
         return Role::orderBy('name')->pluck('name')
             ->when(! $actor->isSuperAdmin(), fn ($c) => $c->reject(fn ($r) => in_array($r, [User::SUPER_ADMIN, User::MAIN_ADMIN], true)))
             ->when(! $actor->seesEverything(), fn ($c) => $c->reject(fn ($r) => $r === User::MANAGEMENT))
@@ -111,10 +126,13 @@ class UserController extends Controller
             'organizations' => $orgs,
             'branches' => Branch::whereIn('organization_id', $orgs->pluck('id'))->orderBy('name')->get(),
             'roles' => $this->assignableRoles($actor),
-            'permissions' => Permission::orderBy('name')->pluck('name'),
+            'permissions' => $actor->managesCallgearOnly() ? collect(User::CALLGEAR_GRANTABLE) : Permission::orderBy('name')->pluck('name'),
+            'callgearAdmin' => $actor->managesCallgearOnly(),
             'permissionLabels' => RolesAndPermissionsSeeder::PERMISSIONS,
             'modules' => Module::orderBy('name')->get(),
-            'employees' => Employee::whereIn('organization_id', $orgs->pluck('id'))->orWhereNull('organization_id')->orderBy('first_name')->get(),
+            'employees' => Employee::where(fn ($q) => $q->whereIn('organization_id', $orgs->pluck('id'))->orWhereNull('organization_id'))
+                ->when($actor->managesCallgearOnly(), fn ($q) => $q->whereHas('tags', fn ($t) => $t->where('name', 'Callgear')))
+                ->orderBy('first_name')->get(),
         ];
     }
 
@@ -140,6 +158,13 @@ class UserController extends Controller
         if (! $actor->seesEverything()) {
             $data['organization_id'] = $actor->organization_id; // org admins can't move users out of their org
         }
+        $callgear = $actor->managesCallgearOnly();
+        if ($callgear) {
+            // A Callgear admin's users are always Callgear agents, with only the permissions she may hand out.
+            $data['roles'] = [User::CALLGEAR_AGENT];
+            $data['permissions'] = array_values(array_intersect($data['permissions'] ?? [], User::CALLGEAR_GRANTABLE));
+            $data['modules'] = null;
+        }
 
         return [
             'attributes' => [
@@ -149,7 +174,8 @@ class UserController extends Controller
                 'is_active' => $request->boolean('is_active'),
             ],
             'roles' => $data['roles'] ?? [],
-            'permissions' => $actor->can('roles.manage') ? ($data['permissions'] ?? []) : null,
+            'permissions' => $callgear || $actor->can('roles.manage') ? ($data['permissions'] ?? []) : null,
+            'grantable' => $callgear ? User::CALLGEAR_GRANTABLE : null,
             'modules' => $data['modules'] ?? [],
             'employee_id' => $data['employee_id'] ?? null,
         ];
@@ -161,18 +187,29 @@ class UserController extends Controller
         $kept = $user->roles->pluck('name')->diff($this->assignableRoles(request()->user()));
         $user->syncRoles($kept->merge($data['roles'])->unique()->all());
 
-        if ($data['permissions'] !== null) {
+        if ($data['grantable'] !== null) {
+            // Only touch the permissions she may grant; anything else set by a full admin stays.
+            $user->syncPermissions($user->getDirectPermissions()->pluck('name')->diff($data['grantable'])->merge($data['permissions'])->unique()->all());
+        } elseif ($data['permissions'] !== null) {
             $user->syncPermissions($data['permissions']);
         }
 
-        $overrides = collect($data['modules'])
-            ->filter(fn ($v) => in_array($v, ['allow', 'deny'], true))
-            ->mapWithKeys(fn ($v, $moduleId) => [$moduleId => ['allowed' => $v === 'allow']]);
-        $user->moduleOverrides()->sync($overrides->all());
+        if ($data['modules'] !== null) {
+            $this->syncModules($user, $data['modules']);
+        }
 
         Employee::where('user_id', $user->id)->where('id', '!=', $data['employee_id'])->update(['user_id' => null]);
         if ($data['employee_id']) {
             Employee::whereKey($data['employee_id'])->update(['user_id' => $user->id]);
         }
+    }
+
+    private function syncModules(User $user, array $modules): void
+    {
+        $data = ['modules' => $modules];
+        $overrides = collect($data['modules'])
+            ->filter(fn ($v) => in_array($v, ['allow', 'deny'], true))
+            ->mapWithKeys(fn ($v, $moduleId) => [$moduleId => ['allowed' => $v === 'allow']]);
+        $user->moduleOverrides()->sync($overrides->all());
     }
 }

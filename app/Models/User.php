@@ -81,6 +81,19 @@ class User extends Authenticatable
         return $this->hasAnyRole([self::SUPER_ADMIN, self::MANAGEMENT]);
     }
 
+    public const CALLGEAR_ADMIN = 'callgear-admin';
+
+    public const CALLGEAR_AGENT = 'callgear-agent';
+
+    /** Permissions a Callgear admin may switch on or off for her agents (never user or role management). */
+    public const CALLGEAR_GRANTABLE = ['guides.manage', 'complaints.manage'];
+
+    /** Callgear team admin: manages only callgear-agent users (see Admin\UserController). */
+    public function managesCallgearOnly(): bool
+    {
+        return ! $this->seesEverything() && $this->hasRole(self::CALLGEAR_ADMIN) && ! $this->hasAnyRole([self::MAIN_ADMIN, 'org-admin']);
+    }
+
     /** Roles with "callgear.only" see CallGear dashboards and calls, and nothing from Zenoti. */
     public function callgearOnly(): bool
     {
