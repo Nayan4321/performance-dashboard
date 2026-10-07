@@ -46,7 +46,7 @@ class RevenueCompareController extends Controller
             }
         }
 
-        $agents = Employee::whereHas('tags', fn ($q) => $q->whereKey(Tag::idsFor(['Callgear'])))->get();
+        $agents = Employee::whereHas('tags', fn ($q) => $q->whereKey(Tag::idsFor([Tag::AGENTS])))->get();
         $norm = fn ($s) => array_values(array_filter(preg_split('/\s+/', mb_strtolower(trim((string) $s)))));
         $agentFor = function (string $name) use ($agents, $norm) {
             $w = $norm($name);
@@ -84,7 +84,7 @@ class RevenueCompareController extends Controller
         }
         fclose($fh);
         if (! $dates) {
-            return back()->withErrors(['file' => 'No Callgear agent lines found in the file. Check that the agents are tagged "Callgear".']);
+            return back()->withErrors(['file' => 'No Callgear agent lines found in the file. Check that the agents are tagged "'.Tag::AGENTS.'".']);
         }
         $from = min($dates)->startOfDay();
         $to = max($dates)->endOfDay();

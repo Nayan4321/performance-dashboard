@@ -87,7 +87,7 @@ class AppFlowTest extends TestCase
         $this->actingAs($this->admin())->get(route('invoices.index'))->assertOk()
             ->assertSee('INV-77')->assertSee('Inv Maker')->assertSee('157.50')->assertSee('150.00');
         // Tag filter: invoices created by tagged staff only.
-        $tag = \App\Models\Tag::idsFor(['Callgear'])[0];
+        $tag = \App\Models\Tag::idsFor([\App\Models\Tag::AGENTS])[0];
         $this->actingAs($this->admin())->get(route('invoices.index', ['tag_id' => $tag]))->assertOk()->assertDontSee('INV-77');
         $emp->tags()->sync([$tag]);
         $this->actingAs($this->admin())->get(route('invoices.index', ['tag_id' => $tag]))->assertSee('INV-77');

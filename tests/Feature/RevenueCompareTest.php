@@ -19,7 +19,7 @@ class RevenueCompareTest extends TestCase
     {
         $this->seed(DatabaseSeeder::class);
         $nejma = Employee::create(['source' => 'zenoti', 'first_name' => 'Nejma', 'last_name' => 'Dahchache', 'is_active' => true]);
-        $nejma->tags()->attach(Tag::idsFor(['Callgear']));
+        $nejma->tags()->attach(Tag::idsFor([\App\Models\Tag::AGENTS]));
         $sale = fn ($inv, $amount, array $raw = []) => Sale::create(['zenoti_id' => uniqid(), 'invoice_no' => $inv, 'created_by_employee_id' => $nejma->id, 'item_type' => 'Service',
             'status' => 'Closed', 'net_amount' => $amount / 1.05, 'sold_at' => '2026-10-02', 'raw' => $raw + ['payment_type' => 'Card', 'sales_inc_tax' => $amount, 'invoice_closed_date' => '2026-10-02T12:00:00']]);
         $sale('S1', 105);

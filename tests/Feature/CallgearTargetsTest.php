@@ -21,7 +21,7 @@ class CallgearTargetsTest extends TestCase
     {
         $this->seed(DatabaseSeeder::class);
         $this->seed(CallgearPerformanceDashboardSeeder::class);
-        $callgear = Tag::idsFor(['Callgear'])[0];
+        $callgear = Tag::idsFor([\App\Models\Tag::AGENTS])[0];
         $lead = Tag::idsFor(['Team lead'])[0];
         foreach (range(1, 5) as $i) {
             Employee::create(['source' => 'zenoti', 'first_name' => "Agent$i", 'last_name' => 'X', 'is_active' => true])->tags()->attach($callgear);

@@ -231,12 +231,12 @@ class RizzLayoutTest extends TestCase
         [$a, $c] = \App\Models\Employee::whereHas('calls')->take(1)->get()->concat(\App\Models\Employee::doesntHave('calls')->take(1)->get())->all()
             + [null, null];
         $c ??= \App\Models\Employee::create(['first_name' => 'Quiet', 'last_name' => 'Agent', 'branch_id' => $a->branch_id, 'organization_id' => $a->organization_id, 'is_active' => true, 'source' => 'manual']);
-        $this->actingAs($admin)->post(route('employees.bulk-tags'), ['employee_ids' => [$a->id, $c->id], 'tag' => 'callgear', 'action' => 'add']);
+        $this->actingAs($admin)->post(route('employees.bulk-tags'), ['employee_ids' => [$a->id, $c->id], 'tag' => 'call agents', 'action' => 'add']);
         \App\Models\Call::create(['employee_id' => $a->id, 'branch_id' => $a->branch_id, 'status' => 'answered', 'duration_seconds' => 600, 'started_at' => now()]);
         $today = now()->toDateString();
 
         $d = Dashboard::where('name', \Database\Seeders\CallgearPerformanceDashboardSeeder::NAME)->first()->load('widgets');
-        $this->assertSame('Callgear', $d->employee_tag);
+        $this->assertSame(\App\Models\Tag::AGENTS, $d->employee_tag);
         $this->assertTrue($d->isCallgearOnly());
         foreach ($d->widgets as $w) {
             $this->actingAs($admin)->getJson(route('dashboards.widget-data', [$d, $w]))->assertOk()->assertJsonMissing(['error']);
@@ -356,7 +356,7 @@ class RizzLayoutTest extends TestCase
         $mine = \App\Models\Employee::create(['source' => 'zenoti', 'first_name' => 'Mine', 'last_name' => 'Agent']);
         $mate = \App\Models\Employee::create(['source' => 'zenoti', 'first_name' => 'Mate', 'last_name' => 'Agent']);
         $other = \App\Models\Employee::create(['source' => 'zenoti', 'first_name' => 'Therapist', 'last_name' => 'Elsewhere']);
-        $tag = \App\Models\Tag::idsFor(['Callgear']);
+        $tag = \App\Models\Tag::idsFor([\App\Models\Tag::AGENTS]);
         $mine->tags()->sync($tag);
         $mate->tags()->sync($tag);
         $mine->update(['user_id' => $agent->id]);

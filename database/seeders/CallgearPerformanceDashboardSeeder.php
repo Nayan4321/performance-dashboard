@@ -14,7 +14,7 @@ class CallgearPerformanceDashboardSeeder extends Seeder
 {
     public const NAME = 'Callgear Performance';
 
-    public const TAG = 'Callgear';
+    public const TAG = \App\Models\Tag::AGENTS;
 
     /** Value (price) of the appointments each Callgear agent booked, whoever serves them. */
     public const REVENUE = 'Revenue';
@@ -43,7 +43,7 @@ class CallgearPerformanceDashboardSeeder extends Seeder
 
         $d = Dashboard::create([
             'name' => self::NAME, 'employee_tag' => self::TAG, 'sort_order' => 0,
-            'description' => 'Agents tagged Callgear · targets 100 calls and 120 talk minutes per day',
+            'description' => 'Agents tagged Call agents · targets 100 calls and 120 talk minutes per day',
         ]);
         $targets = ['target_calls' => 100, 'target_minutes' => 120];
 

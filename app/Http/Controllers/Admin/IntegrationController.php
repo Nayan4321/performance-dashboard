@@ -321,7 +321,7 @@ class IntegrationController extends Controller
         }
         $from = \Carbon\Carbon::parse($date)->toDateString();
         $to = \Carbon\Carbon::parse($date)->addDays(6)->toDateString();
-        $staff = \App\Models\Tag::whereRaw('LOWER(name) = ?', ['callgear'])->first()?->employees()->get(['employees.zenoti_id', 'employees.first_name', 'employees.last_name'])
+        $staff = \App\Models\Tag::agents()?->employees()->get(['employees.zenoti_id', 'employees.first_name', 'employees.last_name'])
             ->flatMap(fn ($e) => array_filter([$e->zenoti_id, trim($e->first_name.' '.$e->last_name)]))->map(fn ($v) => mb_strtolower($v))->all() ?? [];
         $sales = $client->endpoint('sales', ['center_id' => $center]);
         $get = ['center_id' => $center, 'start_date' => $from, 'end_date' => $to, 'page' => 1, 'size' => 100];
@@ -367,9 +367,9 @@ class IntegrationController extends Controller
 
     private function employeeFilterCheck(\App\Services\Zenoti\ZenotiClient $client, ?string $center, string $date): array
     {
-        $employee = \App\Models\Tag::whereRaw('LOWER(name) = ?', ['callgear'])->first()?->employees()->whereNotNull('zenoti_id')->first();
+        $employee = \App\Models\Tag::agents()?->employees()->whereNotNull('zenoti_id')->first();
         if (! $employee || ! $center) {
-            return ['error' => 'Tag at least one employee "Callgear" (with a Zenoti id) first.'];
+            return ['error' => 'Tag at least one employee "'.\App\Models\Tag::AGENTS.'" (with a Zenoti id) first.'];
         }
         $to = \Carbon\Carbon::parse($date)->addDay()->toDateString();
         $calls = [

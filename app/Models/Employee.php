@@ -46,10 +46,10 @@ class Employee extends Model
         return $this->belongsTo(User::class);
     }
 
-    /** Ids of employees tagged "Callgear" (the call-center team). */
+    /** Ids of employees tagged "Call agents" (the call-center team). */
     public static function callgearIds(): array
     {
-        return static::whereHas('tags', fn ($t) => $t->whereRaw('LOWER(name) = ?', ['callgear']))->pluck('id')->all();
+        return static::whereHas('tags', fn ($t) => $t->whereRaw('LOWER(name) = ?', [mb_strtolower(Tag::AGENTS)]))->pluck('id')->all();
     }
 
     public function tags(): BelongsToMany

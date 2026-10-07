@@ -10,6 +10,15 @@ class Tag extends Model
 {
     protected $fillable = ['name', 'color'];
 
+    /** The call-center team's tag (was "Callgear" until 2026-10-07). */
+    public const AGENTS = 'Call agents';
+
+    /** The call-center team's tag, or null if nobody carries it yet. */
+    public static function agents(): ?self
+    {
+        return static::whereRaw('LOWER(name) = ?', [mb_strtolower(self::AGENTS)])->first();
+    }
+
     public const COLORS = ['primary', 'success', 'info', 'warning', 'danger', 'secondary', 'purple', 'pink'];
 
     public function employees(): BelongsToMany

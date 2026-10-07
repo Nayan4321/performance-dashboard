@@ -423,9 +423,9 @@ class ZenotiSyncTest extends TestCase
         $b = \App\Models\Branch::create(['name' => 'Q1', 'zenoti_center_id' => 'c-q1', 'is_active' => true, 'organization_id' => \App\Models\Organization::firstOrCreate(['name' => 'GF'])->id]);
         $m = \App\Models\Branch::create(['name' => 'M2', 'zenoti_center_id' => 'c-m2', 'is_active' => true, 'organization_id' => $b->organization_id]);
         $e = \App\Models\Employee::create(['first_name' => 'Agent', 'branch_id' => $b->id, 'source' => 'zenoti', 'organization_id' => $b->organization_id]);
-        $e->tags()->attach(\App\Models\Tag::idsFor(['Callgear']));
+        $e->tags()->attach(\App\Models\Tag::idsFor([\App\Models\Tag::AGENTS]));
         Http::fake(['*' => Http::response([])]);
-        $this->artisan('integrations:sync zenoti --entity=sales --days=1 --tag=callgear')->expectsOutputToContain('1 employee(s) tagged Callgear')->assertSuccessful();
+        $this->artisan('integrations:sync zenoti --entity=sales --days=1 --tag="call agents"')->expectsOutputToContain('1 employee(s) tagged Call agents')->assertSuccessful();
         Http::assertSent(fn ($r) => str_contains($r->url(), 'c-m2'));
         Http::assertSent(fn ($r) => str_contains($r->url(), 'c-q1'));
 
@@ -435,7 +435,7 @@ class ZenotiSyncTest extends TestCase
         Appointment::create(['zenoti_id' => 'z1', 'branch_id' => $m->id, 'booked_by_employee_id' => $e->id, 'guest_id' => $booked->id, 'start_time' => now(), 'status' => 'Booked']);
         Appointment::create(['zenoti_id' => 'z2', 'branch_id' => $m->id, 'guest_id' => $other->id, 'start_time' => now(), 'status' => 'Booked']);
         Http::fake(['api.zenoti.test/v1/guests/*' => Http::response(['id' => 'g-booked', 'personal_info' => ['first_name' => 'Bo']]), '*' => Http::response([])]);
-        $this->artisan('integrations:sync zenoti --entity=guests --all-guests --tag=Callgear')->assertSuccessful();
+        $this->artisan('integrations:sync zenoti --entity=guests --all-guests --tag="Call agents"')->assertSuccessful();
         $this->assertNotNull($booked->fresh()->profile_synced_at);
         $this->assertNull($other->fresh()->profile_synced_at);
     }
@@ -446,7 +446,7 @@ class ZenotiSyncTest extends TestCase
         $m = Branch::create(['name' => 'M2', 'zenoti_center_id' => 'c-m2', 'is_active' => true, 'organization_id' => $b->organization_id]);
         $agent = Employee::create(['first_name' => 'Agent', 'branch_id' => $b->id, 'source' => 'zenoti', 'organization_id' => $b->organization_id]);
         $other = Employee::create(['first_name' => 'Other', 'branch_id' => $b->id, 'source' => 'zenoti', 'organization_id' => $b->organization_id]);
-        $agent->tags()->attach(\App\Models\Tag::idsFor(['Callgear']));
+        $agent->tags()->attach(\App\Models\Tag::idsFor([\App\Models\Tag::AGENTS]));
         $mine = Guest::create(['zenoti_id' => 'gm', 'source' => 'zenoti']);
         $theirs = Guest::create(['zenoti_id' => 'gt', 'source' => 'zenoti']);
         Appointment::create(['zenoti_id' => 'x1', 'branch_id' => $b->id, 'employee_id' => $agent->id, 'guest_id' => $mine->id, 'start_time' => now(), 'status' => 'Serviced']);
@@ -454,9 +454,9 @@ class ZenotiSyncTest extends TestCase
         Http::fake(['api.zenoti.test/v1/guests/*' => Http::response(['id' => 'gm', 'personal_info' => ['first_name' => 'Mina']]), '*' => Http::response([])]);
 
         $admin = User::role('super-admin')->first();
-        $this->actingAs($admin)->post(route('admin.integrations.sync', 'zenoti'), ['entity' => 'guests', 'branch_id' => $b->id, 'tag' => 'Callgear'])->assertRedirect();
-        $this->assertDatabaseHas('sync_requests', ['branch_id' => $b->id, 'tag' => 'Callgear']);
-        $this->actingAs($admin)->get(route('admin.integrations.index'))->assertSee('Q1, tag Callgear');
+        $this->actingAs($admin)->post(route('admin.integrations.sync', 'zenoti'), ['entity' => 'guests', 'branch_id' => $b->id, 'tag' => 'Call agents'])->assertRedirect();
+        $this->assertDatabaseHas('sync_requests', ['branch_id' => $b->id, 'tag' => 'Call agents']);
+        $this->actingAs($admin)->get(route('admin.integrations.index'))->assertSee('Q1, tag Call agents');
         $this->artisan('integrations:run-requests')->assertSuccessful();
 
         $this->assertNotNull($mine->fresh()->profile_synced_at);
@@ -548,7 +548,7 @@ class ZenotiSyncTest extends TestCase
         $b = Branch::create(['organization_id' => $org->id, 'name' => 'Warqa', 'zenoti_center_id' => 'c1', 'is_active' => true]);
         $agent = Employee::create(['first_name' => 'Hadeer', 'last_name' => 'G', 'zenoti_id' => 'e-agent', 'branch_id' => $b->id, 'organization_id' => $org->id, 'source' => 'zenoti']);
         Employee::create(['first_name' => 'Asma', 'last_name' => 'F', 'zenoti_id' => 'e-ther', 'branch_id' => $b->id, 'organization_id' => $org->id, 'source' => 'zenoti']);
-        $agent->tags()->attach(\App\Models\Tag::idsFor(['Callgear']));
+        $agent->tags()->attach(\App\Models\Tag::idsFor([\App\Models\Tag::AGENTS]));
         Http::fake(['api.zenoti.test/v1/appointments*' => Http::response(['appointments' => [[
             'appointment_id' => 'b1', 'service' => ['name' => 'Wax'], 'status' => 0, 'price' => ['final' => 150], 'center_id' => 'c1',
             'start_time' => now()->addDay()->toIso8601String(), 'creation_date' => now()->toIso8601String(),
@@ -577,7 +577,7 @@ class ZenotiSyncTest extends TestCase
         $org = \App\Models\Organization::firstOrCreate(['name' => 'GF']);
         $b = Branch::create(['organization_id' => $org->id, 'name' => 'Juhu', 'zenoti_center_id' => 'c1']);
         $emp = Employee::create(['first_name' => 'Cara', 'last_name' => 'Gear', 'zenoti_id' => 'e1', 'branch_id' => $b->id, 'organization_id' => $org->id, 'source' => 'zenoti']);
-        $emp->tags()->sync(\App\Models\Tag::idsFor(['Callgear']));
+        $emp->tags()->sync(\App\Models\Tag::idsFor([\App\Models\Tag::AGENTS]));
         Http::fake(function ($request) {
             if ($request->method() === 'POST' && str_contains($request->url(), 'accrual_basis')) {
                 return Http::response(['data' => [['invoice_no' => 'I1', 'sold_by' => 'Cara Gear'], ['invoice_no' => 'I2', 'sold_by' => 'Someone']]]);
@@ -611,7 +611,7 @@ class ZenotiSyncTest extends TestCase
         $org = \App\Models\Organization::firstOrCreate(['name' => 'GF']);
         $b = Branch::create(['organization_id' => $org->id, 'name' => 'Juhu', 'zenoti_center_id' => 'c1']);
         $emp = Employee::create(['first_name' => 'Cara', 'last_name' => 'Gear', 'zenoti_id' => 'e1', 'branch_id' => $b->id, 'organization_id' => $org->id, 'source' => 'zenoti']);
-        $emp->tags()->sync(\App\Models\Tag::idsFor(['Callgear']));
+        $emp->tags()->sync(\App\Models\Tag::idsFor([\App\Models\Tag::AGENTS]));
         $row = fn ($id, $e) => ['appointment_id' => $id, 'start_time' => now()->toIso8601String(), 'therapist' => ['id' => $e]];
         Http::fake(function ($request) use ($row) {
             if (str_contains($request->url(), '/appointments')) {

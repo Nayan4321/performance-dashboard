@@ -21,7 +21,7 @@ class ComplaintController extends Controller
     private function agents()
     {
         return Employee::where('is_active', true)
-            ->whereHas('tags', fn ($t) => $t->where('name', 'like', 'callgear'))
+            ->whereHas('tags', fn ($t) => $t->where('name', 'like', \App\Models\Tag::AGENTS))
             ->orderBy('first_name')->get();
     }
 

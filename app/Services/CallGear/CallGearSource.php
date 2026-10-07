@@ -116,7 +116,7 @@ class CallGearSource implements PerformanceSource
     /**
      * The one staff member a CallGear agent name belongs to: exact full name, else every word of
      * the shorter name found in the longer one ("Hadeer Gaber" = "Hadeer Gaber Saad Hassan").
-     * When several fit, only Callgear-tagged staff count. Null unless exactly one fits.
+     * When several fit, only staff tagged Call agents count. Null unless exactly one fits.
      */
     public static function matchByName(string $name, $staff): ?Employee
     {
@@ -134,7 +134,7 @@ class CallGearSource implements PerformanceSource
             return $short && $short[0] === $long[0] && ! array_diff($short, $long);
         });
         if ($fits->count() > 1) {
-            $fits = $fits->filter(fn ($e) => $e->tags->contains(fn ($t) => strcasecmp($t->name, 'callgear') === 0));
+            $fits = $fits->filter(fn ($e) => $e->tags->contains(fn ($t) => strcasecmp($t->name, \App\Models\Tag::AGENTS) === 0));
         }
 
         return $fits->count() === 1 ? $fits->first() : null;
