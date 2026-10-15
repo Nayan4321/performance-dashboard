@@ -436,21 +436,36 @@ class RizzLayoutTest extends TestCase
         $this->assertFalse($guests->allowedForCallgearOnly());
         $guests->delete();
 
-        // Re-running the seeder on an existing dashboard adds the revenue widget once, after the scorecard.
+        // Updates never undo the client's changes: re-running the seeder leaves deleted, renamed and
+        // role-restricted widgets exactly as they were, and adds nothing back.
+        $tags = $cg->widgets()->where('title', 'Call results by tag')->first();
+        $tags->update(['options' => ['roles' => ['callgear-admin']]]);
+        $cg->widgets()->where('title', 'Calls by branch')->delete();
+        $before = $cg->widgets()->orderBy('position')->get(['id', 'title', 'type', 'options', 'position'])->toArray();
+        $this->seed(\Database\Seeders\CallgearPerformanceDashboardSeeder::class);
+        $this->seed(\Database\Seeders\CallgearPerformanceDashboardSeeder::class);
+        $this->assertSame($before, $cg->widgets()->orderBy('position')->get(['id', 'title', 'type', 'options', 'position'])->toArray());
+        $this->assertSame(['callgear-admin'], $tags->fresh()->option('roles'));
+
+        // A live site without the "already added" list (v75) records it on the first run and adds nothing.
+        \App\Models\Setting::put(\Database\Seeders\CallgearPerformanceDashboardSeeder::ADDED_KEY, null);
         $revenue->delete();
         $this->seed(\Database\Seeders\CallgearPerformanceDashboardSeeder::class);
-        $this->seed(\Database\Seeders\CallgearPerformanceDashboardSeeder::class);
-        $w = $cg->widgets()->orderBy('position')->pluck('title')->all();
-        $this->assertSame(1, count(array_keys($w, \Database\Seeders\CallgearPerformanceDashboardSeeder::REVENUE)));
-        $this->assertSame(array_search('Agent scorecard (who is high or low)', $w) + 1, array_search(\Database\Seeders\CallgearPerformanceDashboardSeeder::REVENUE, $w));
+        $this->assertFalse($cg->widgets()->where('title', 'Revenue')->exists());
+        $this->assertNotNull(\App\Models\Setting::get(\Database\Seeders\CallgearPerformanceDashboardSeeder::ADDED_KEY));
 
-        // Earlier versions (per-agent chart titled differently, single all-time card) become the per-employee Revenue chart.
-        $cg->widgets()->where('title', 'Revenue')->delete();
-        $cg->widgets()->create(['title' => 'Revenue', 'type' => 'stat', 'dataset' => 'sales', 'aggregate' => 'sum', 'metric_field' => 'net_amount', 'date_range' => 'all_time', 'width' => 12, 'position' => 7, 'options' => ['all_employees' => true]]);
-        $this->seed(\Database\Seeders\CallgearPerformanceDashboardSeeder::class);
-        $card = $cg->widgets()->where('title', 'Revenue')->sole();
-        $this->assertSame(['agent_revenue', null, 'this_month', 'sales', 'sum', 'net_amount', 800000], [$card->type, $card->group_by, $card->date_range, $card->dataset, $card->aggregate, $card->metric_field, $card->option('team_target')]);
-        $this->assertNull($card->option('all_employees'));
+        // Saving a widget in the editor keeps options the form has no field for, and its roles when no role boxes were shown.
+        $booked = $cg->widgets()->where('title', \Database\Seeders\CallgearPerformanceDashboardSeeder::BOOKINGS)->sole();
+        $booked->update(['options' => ['color' => 'success', 'credit' => 'booked_by', 'roles' => ['callgear-admin']]]);
+        $form = ['title' => 'Booked', 'type' => 'hbar', 'dataset' => 'appointments', 'aggregate' => 'count', 'group_by' => 'employee', 'date_range' => 'this_month', 'width' => 12, 'options' => ['color' => 'info']];
+        $this->actingAs($this->admin())->put(route('widgets.update', [$cg, $booked]), $form)->assertRedirect();
+        $this->assertSame(['booked_by', 'info', ['callgear-admin']], [$booked->fresh()->option('credit'), $booked->fresh()->option('color'), $booked->fresh()->option('roles')]);
+        $this->actingAs($this->admin())->put(route('widgets.update', [$cg, $booked]), $form + ['roles_shown' => 1])->assertRedirect();
+        $this->assertNull($booked->fresh()->option('roles')); // all role boxes unticked = everyone
+        $this->assertSame('booked_by', $booked->fresh()->option('credit'));
+
+        $card = $cg->widgets()->create(['title' => 'Revenue', 'type' => 'agent_revenue', 'dataset' => 'sales', 'aggregate' => 'sum', 'metric_field' => 'net_amount',
+            'date_range' => 'this_month', 'width' => 12, 'position' => 99, 'filters' => [], 'options' => ['team_target' => 800000, 'lead_tag' => 'Team lead']]);
 
         // Revenue is split per agent against the team target (details in CallgearTargetsTest).
         $data = $this->actingAs($this->admin())->getJson(route('dashboards.widget-data', [$cg, $card]))->json();

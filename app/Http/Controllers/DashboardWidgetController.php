@@ -12,6 +12,9 @@ use Illuminate\Validation\ValidationException;
 
 class DashboardWidgetController extends Controller
 {
+    /** Widget options the edit form sets; any other option on a widget is left alone when it is saved. */
+    private const FORM_OPTIONS = ['icon', 'color', 'target', 'target_calls', 'target_minutes', 'metric', 'all_employees', 'team_target', 'lead_tag', 'tiers', 'tags', 'roles'];
+
     public function store(Request $request, Dashboard $dashboard)
     {
         $dashboard->widgets()->create($this->validated($request) + ['position' => $dashboard->widgets()->max('position') + 1]);
@@ -22,7 +25,14 @@ class DashboardWidgetController extends Controller
     public function update(Request $request, Dashboard $dashboard, DashboardWidget $widget)
     {
         abort_unless($widget->dashboard_id === $dashboard->id, 404);
-        $widget->update($this->validated($request));
+        $data = $this->validated($request);
+        // Options the form has no field for (e.g. credit = booked_by) are kept, not wiped by a save.
+        $kept = array_diff_key((array) $widget->options, array_flip(self::FORM_OPTIONS));
+        if (! $request->has('roles_shown') && ! $request->has('options.roles') && $widget->option('roles')) {
+            $kept['roles'] = $widget->option('roles'); // the form had no role boxes, so the widget's roles stay
+        }
+        $data['options'] = ($kept + (array) ($data['options'] ?? [])) ?: null;
+        $widget->update($data);
 
         return back()->with('status', 'Widget saved.');
     }
@@ -83,7 +93,7 @@ class DashboardWidgetController extends Controller
         }
         $data['options'] = $opts;
         $data['options'] = array_filter(
-            array_intersect_key($data['options'] ?? [], array_flip(['icon', 'color', 'target', 'target_calls', 'target_minutes', 'metric', 'all_employees', 'team_target', 'lead_tag', 'tiers', 'tags', 'roles'])),
+            array_intersect_key($data['options'] ?? [], array_flip(self::FORM_OPTIONS)),
             fn ($v) => $v !== null && $v !== ''
         ) ?: null;
 

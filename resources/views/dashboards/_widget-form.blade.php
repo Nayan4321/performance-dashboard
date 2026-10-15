@@ -55,6 +55,7 @@
             <div class="col-md-3 opt-metric"><label class="form-label small">Chart shows</label>
                 <select name="options[metric]" class="form-select form-select-sm"><option value="calls">Calls per day</option><option value="talk" @selected($widget->option('metric') === 'talk')>Talk minutes per day</option></select></div>
             @if(isset($roles))
+            <input type="hidden" name="roles_shown" value="1">
             <div class="col-12"><label class="form-label small mb-1">Visible to roles <span class="text-muted">(none ticked = everyone who sees this dashboard)</span></label>
                 <div class="d-flex flex-wrap gap-3">@foreach($roles as $r)
                     <div class="form-check form-check-inline small mb-0"><input class="form-check-input" type="checkbox" name="options[roles][]" value="{{ $r }}" id="wr-{{ $widget->id ?? 'new' }}-{{ $r }}" @checked(in_array($r, (array) $widget->option('roles', [])))>

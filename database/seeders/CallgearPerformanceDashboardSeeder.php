@@ -3,12 +3,13 @@
 namespace Database\Seeders;
 
 use App\Models\Dashboard;
+use App\Models\Setting;
 use Illuminate\Database\Seeder;
 
 /**
  * "Callgear Performance": call-centre agents (employees tagged "Callgear") against
- * 100 calls and 120 talk minutes per day. Every widget reads CallGear data, so the
- * callgear-agent role can open it. Safe to re-run.
+ * 100 calls and 120 talk minutes per day. Safe to re-run: an existing dashboard only gets widgets
+ * it never had, and nothing the client changed is overwritten.
  */
 class CallgearPerformanceDashboardSeeder extends Seeder
 {
@@ -19,9 +20,6 @@ class CallgearPerformanceDashboardSeeder extends Seeder
     /** Value (price) of the appointments each Callgear agent booked, whoever serves them. */
     public const REVENUE = 'Revenue';
 
-    /** Title the widget had in the first version, when it was a bar per agent. */
-    private const OLD_REVENUE = 'Revenue per agent (Zenoti sales)';
-
     /** Appointments each agent booked in Zenoti (for any provider or branch). */
     public const BOOKINGS = 'Appointments booked';
 
@@ -30,13 +28,7 @@ class CallgearPerformanceDashboardSeeder extends Seeder
     public function run(): void
     {
         if ($existing = Dashboard::where('name', self::NAME)->first()) {
-            $this->addRevenue($existing);
-            $this->addBookings($existing);
-            $this->addAfter($existing, self::REVENUE, self::COMMISSION_SPEC);
-            $this->addAfter($existing, self::REVENUE, self::GROUP_SPEC);
-            $this->addAfter($existing, self::GROUP_SPEC['title'], self::TIER_REVENUE_SPEC);
-            $this->addAfter($existing, 'Talk minutes per day vs target (120)', self::TAGS_SPEC);
-            $this->addAfter($existing, self::TAGS_SPEC['title'], self::BRANCH_SPEC);
+            $this->addNewWidgets($existing);
 
             return;
         }
@@ -74,6 +66,7 @@ class CallgearPerformanceDashboardSeeder extends Seeder
                 'group_by' => $group, 'width' => $width, 'filters' => [], 'options' => $options ?: null, 'position' => $i, 'date_range' => $range,
             ]);
         }
+        Setting::put(self::ADDED_KEY, json_encode(array_keys($this->newWidgets())));
     }
 
     /**
@@ -106,6 +99,48 @@ class CallgearPerformanceDashboardSeeder extends Seeder
     public const BRANCH_SPEC = ['title' => 'Calls by branch', 'type' => 'hbar', 'dataset' => 'calls', 'aggregate' => 'count', 'group_by' => 'branch',
         'date_range' => 'this_month', 'width' => 12, 'options' => ['color' => 'info']];
 
+    /**
+     * Widgets added to existing dashboards by later versions. Each is added once, ever: a widget the client
+     * deleted, renamed or edited (roles, options, targets) is left exactly as they set it on every later update.
+     */
+    private function newWidgets(): array
+    {
+        return [
+            // Shipped up to v75 (already on the live dashboard):
+            self::REVENUE => fn (Dashboard $d) => $this->addAfter($d, 'Agent scorecard (who is high or low)', ['title' => self::REVENUE, 'width' => 12] + self::REVENUE_SPEC),
+            self::BOOKINGS => fn (Dashboard $d) => $this->addAfter($d, self::REVENUE, ['title' => self::BOOKINGS, 'type' => 'hbar', 'dataset' => 'appointments', 'aggregate' => 'count',
+                'group_by' => 'employee', 'date_range' => 'this_month', 'options' => self::BOOKINGS_OPTIONS, 'width' => 12]),
+            self::COMMISSION_SPEC['title'] => fn (Dashboard $d) => $this->addAfter($d, self::REVENUE, self::COMMISSION_SPEC),
+            self::GROUP_SPEC['title'] => fn (Dashboard $d) => $this->addAfter($d, self::REVENUE, self::GROUP_SPEC),
+            self::TIER_REVENUE_SPEC['title'] => fn (Dashboard $d) => $this->addAfter($d, self::GROUP_SPEC['title'], self::TIER_REVENUE_SPEC),
+            self::TAGS_SPEC['title'] => fn (Dashboard $d) => $this->addAfter($d, 'Talk minutes per day vs target (120)', self::TAGS_SPEC),
+            self::BRANCH_SPEC['title'] => fn (Dashboard $d) => $this->addAfter($d, self::TAGS_SPEC['title'], self::BRANCH_SPEC),
+            // New widgets go here; they are added on the next update and never touched again.
+        ];
+    }
+
+    /** Settings key listing the widgets already added to the existing dashboard. */
+    public const ADDED_KEY = 'seeded.callgear_widgets';
+
+    private function addNewWidgets(Dashboard $d): void
+    {
+        $added = json_decode((string) Setting::get(self::ADDED_KEY, ''), true);
+        if (! is_array($added)) {
+            // First run of this logic (live site is on v75, which had every widget above): record them, add nothing,
+            // so widgets the client removed do not come back.
+            Setting::put(self::ADDED_KEY, json_encode(array_keys($this->newWidgets())));
+
+            return;
+        }
+        foreach ($this->newWidgets() as $title => $add) {
+            if (! in_array($title, $added, true)) {
+                $add($d);
+                $added[] = $title;
+            }
+        }
+        Setting::put(self::ADDED_KEY, json_encode(array_values($added)));
+    }
+
     private function addAfter(Dashboard $d, string $afterTitle, array $spec): void
     {
         if ($d->widgets()->where('title', $spec['title'])->exists()) {
@@ -114,42 +149,5 @@ class CallgearPerformanceDashboardSeeder extends Seeder
         $after = $d->widgets()->where('title', $afterTitle)->max('position') ?? $d->widgets()->max('position') ?? 0;
         $d->widgets()->where('position', '>', $after)->increment('position');
         $d->widgets()->create($spec + ['filters' => [], 'position' => $after + 1]);
-    }
-
-    /** Existing dashboards: earlier versions of the revenue widget (per-agent chart, single card) become the per-employee chart. */
-    private function addRevenue(Dashboard $d): void
-    {
-        if ($card = $d->widgets()->where('title', self::REVENUE)->first()) {
-            // The client counts revenue as in Zenoti's Sales-Accrual report, against the team target.
-            if ($card->type !== 'agent_revenue') {
-                $card->update(self::REVENUE_SPEC);
-            }
-
-            return;
-        }
-        if ($old = $d->widgets()->where('title', self::OLD_REVENUE)->first()) {
-            $old->update(['title' => self::REVENUE] + self::REVENUE_SPEC);
-
-            return;
-        }
-        $after = $d->widgets()->where('type', 'agent_table')->max('position') ?? $d->widgets()->max('position') ?? 0;
-        $d->widgets()->where('position', '>', $after)->increment('position');
-        $d->widgets()->create(self::REVENUE_SPEC + [
-            'title' => self::REVENUE,
-            'width' => 12, 'filters' => [], 'position' => $after + 1,
-        ]);
-    }
-
-    private function addBookings(Dashboard $d): void
-    {
-        if ($d->widgets()->where('title', self::BOOKINGS)->exists()) {
-            return;
-        }
-        $after = $d->widgets()->where('title', self::REVENUE)->max('position') ?? $d->widgets()->max('position') ?? 0;
-        $d->widgets()->where('position', '>', $after)->increment('position');
-        $d->widgets()->create([
-            'title' => self::BOOKINGS, 'type' => 'hbar', 'dataset' => 'appointments', 'aggregate' => 'count', 'group_by' => 'employee',
-            'date_range' => 'this_month', 'options' => self::BOOKINGS_OPTIONS, 'width' => 12, 'filters' => [], 'position' => $after + 1,
-        ]);
     }
 }

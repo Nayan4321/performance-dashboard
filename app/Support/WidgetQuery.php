@@ -36,6 +36,9 @@ class WidgetQuery
     /** Set by the records panel when a "Call results by tag" segment is clicked. */
     public ?string $callTag = null;
 
+    /** Set by the records panel when "Clients attended" on the agent scorecard is clicked: list those clients' sales. */
+    public bool $clientSales = false;
+
     public function __construct(
         private User $user,
         private ?int $branchId = null,
@@ -207,6 +210,14 @@ class WidgetQuery
             $query->where(fn ($w) => $w->where('calls.tags', $t)->orWhere('calls.tags', 'like', "$t,%")->orWhere('calls.tags', 'like', "%,$t")
                 ->orWhere('calls.tags', 'like', "%, $t")->orWhere('calls.tags', 'like', "%,$t,%")->orWhere('calls.tags', 'like', "%, $t,%"));
         }
+        $note = null;
+        if ($this->clientSales && $table === 'calls' && $widget->type === 'agent_table') {
+            $query = $this->clientSalesQuery($widget, $ds, $key);
+            $ds = Datasets::get('sales');
+            $table = 'sales';
+            $key = null;
+            $note = 'Sales ex VAT '.number_format((float) (clone $query)->sum('sales.net_amount'), 2).' AED from clients on these calls';
+        }
         $group = $field ?? $widget->group_by;
         if ($key !== null && $group) {
             [$expr] = $this->groupExpression($group, $ds);
@@ -258,7 +269,7 @@ class WidgetQuery
                 array_map(fn ($i) => $r->{"c$i"} === '' ? null : $r->{"c$i"}, array_keys($cols)),
             ))->values()->all(),
             'guest_links' => $rows->map(fn ($r) => isset($r->_guest) && $r->_guest ? rtrim(config('zenoti.web_url'), '/').'/Guests/GuestProfileV2/GuestProfileV2.aspx?UserId='.$r->_guest : null)->all(),
-        ];
+        ] + array_filter(['note' => $note]);
     }
 
     /** Module A detail table: one row per branch with footfall, sales, ATV, discount % (sales dataset). */
@@ -369,6 +380,7 @@ class WidgetQuery
         $stats = $this->baseQuery($widget, $ds)->whereNotNull('calls.employee_id')
             ->selectRaw('calls.employee_id as e, COUNT(*) as c, SUM(calls.duration_seconds) as t')
             ->groupBy('calls.employee_id')->get()->keyBy('e');
+        [$clients, $clientSales] = $widget->type === 'agent_table' ? $this->clientsAttended($widget, $ds, $from, $to) : [collect(), collect()];
 
         $tags = $this->tagIds($widget);
         $allowed = $this->user->visibleBranchIds();
@@ -385,7 +397,7 @@ class WidgetQuery
             $employees->whereIn('id', $stats->keys());
         }
 
-        $rows = $employees->get()->map(function (Employee $e) use ($stats, $days, $targetCalls, $targetMinutes) {
+        $rows = $employees->get()->map(function (Employee $e) use ($stats, $days, $targetCalls, $targetMinutes, $clients, $clientSales) {
             $s = $stats[$e->id] ?? null;
             $calls = (int) ($s->c ?? 0);
             $minutes = round((float) ($s->t ?? 0) / 60, 1);
@@ -405,6 +417,8 @@ class WidgetQuery
                 'talk_min' => $minutes,
                 'talk_day' => $talkDay,
                 'talk_pct' => $talkPct,
+                'clients' => (int) ($clients[$e->id] ?? 0),
+                'client_sales' => round((float) ($clientSales[$e->id] ?? 0), 2),
                 'achievement' => $score,
                 'status' => $score >= 100 ? 'High' : ($score >= 80 ? 'On track' : 'Low'),
             ];
@@ -417,7 +431,9 @@ class WidgetQuery
             return $meta + [
                 'type' => 'agent_table',
                 'columns' => [['employee', 'Agent', 's'], ['branch', 'Branch', 's'], ['calls', 'Calls', 'n'], ['calls_day', 'Calls / day', 'n'], ['calls_pct', '% of '.(float) $targetCalls.' calls', 'p'],
-                    ['talk_min', 'Talk min', 'n'], ['talk_day', 'Talk min / day', 'n'], ['talk_pct', '% of '.(float) $targetMinutes.' min', 'p'], ['achievement', 'Score %', 'p'], ['status', 'Status', 's']],
+                    ['talk_min', 'Talk min', 'n'], ['talk_day', 'Talk min / day', 'n'], ['talk_pct', '% of '.(float) $targetMinutes.' min', 'p'],
+                    ['clients', 'Clients attended', 'n'], ['client_sales', 'Sales from them', 'm'], ['achievement', 'Score %', 'p'], ['status', 'Status', 's']],
+                'clickable' => ['clients', 'client_sales'],
                 'sort' => 'achievement',
                 'rows' => $rows->all(),
             ];
@@ -436,6 +452,37 @@ class WidgetQuery
             'values' => $sorted->pluck($talk ? 'talk_day' : 'calls_day')->all(),
             'percents' => $sorted->pluck($talk ? 'talk_pct' : 'calls_pct')->all(),
         ];
+    }
+
+    /**
+     * Clients attended: the different clients (calls matched to a guest by phone) on each agent's calls in the
+     * period, and the sales (ex VAT) those clients made in the same period, in any branch.
+     * A client two agents spoke to counts for both.
+     */
+    private function clientsAttended(DashboardWidget $widget, array $ds, $from, $to): array
+    {
+        $pairs = $this->baseQuery($widget, $ds)->whereNotNull('calls.employee_id')->whereNotNull('calls.guest_id')
+            ->select('calls.employee_id', 'calls.guest_id')->distinct();
+        $clients = DB::query()->fromSub($pairs, 'p')->selectRaw('p.employee_id as e, COUNT(*) as n')->groupBy('p.employee_id')->pluck('n', 'e');
+        $sales = DB::query()->fromSub($pairs, 'p')->join('sales', 'sales.guest_id', '=', 'p.guest_id')
+            ->when($from, fn ($q) => $q->where('sales.sold_at', '>=', $from))
+            ->when($to, fn ($q) => $q->where('sales.sold_at', '<=', $to))
+            ->selectRaw('p.employee_id as e, SUM(sales.net_amount) as s')->groupBy('p.employee_id')->pluck('s', 'e');
+
+        return [$clients, $sales];
+    }
+
+    /** Sales of the clients on the agent's calls (the "Clients attended" click-through). */
+    private function clientSalesQuery(DashboardWidget $widget, array $ds, ?string $key): Builder
+    {
+        $guests = $this->baseQuery($widget, $ds)->whereNotNull('calls.guest_id')
+            ->when($key !== null && $key !== '', fn ($q) => $q->where('calls.employee_id', (int) $key))
+            ->select('calls.guest_id');
+        [$from, $to] = $this->dateRange($widget->date_range);
+
+        return DB::table('sales')->whereIn('sales.guest_id', $guests)
+            ->when($from, fn ($q) => $q->where('sales.sold_at', '>=', $from))
+            ->when($to, fn ($q) => $q->where('sales.sold_at', '<=', $to));
     }
 
     /** Tagged agents the user may see (active, or with data), for the agent widgets. */

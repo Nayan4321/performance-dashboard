@@ -132,4 +132,38 @@ class CallgearTargetsTest extends TestCase
 
         $this->actingAs($admin)->get(route('dashboards.show', $d))->assertOk();
     }
+
+    public function test_scorecard_counts_clients_attended_and_their_sales(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+        $this->seed(CallgearPerformanceDashboardSeeder::class);
+        $tag = Tag::idsFor([Tag::AGENTS])[0];
+        $a = Employee::create(['source' => 'zenoti', 'first_name' => 'Agent', 'last_name' => 'One', 'is_active' => true]);
+        $a->tags()->attach($tag);
+        $g1 = \App\Models\Guest::create(['first_name' => 'G1', 'last_name' => 'X', 'registered_at' => now()]);
+        $g2 = \App\Models\Guest::create(['first_name' => 'G2', 'last_name' => 'X', 'registered_at' => now()]);
+        $g3 = \App\Models\Guest::create(['first_name' => 'G3', 'last_name' => 'X', 'registered_at' => now()]);
+        Call::create(['external_id' => 'c1', 'employee_id' => $a->id, 'guest_id' => $g1->id, 'started_at' => now()]);
+        Call::create(['external_id' => 'c2', 'employee_id' => $a->id, 'guest_id' => $g1->id, 'started_at' => now()]); // same client again
+        Call::create(['external_id' => 'c3', 'employee_id' => $a->id, 'guest_id' => $g2->id, 'started_at' => now()]);
+        Call::create(['external_id' => 'c4', 'employee_id' => $a->id, 'started_at' => now()]);                         // unknown number
+        $sale = fn ($g, $amt) => Sale::create(['zenoti_id' => uniqid(), 'guest_id' => $g->id, 'sold_at' => now(), 'item_type' => 'Service', 'status' => 'Closed', 'net_amount' => $amt]);
+        $sale($g1, 300);
+        $sale($g2, 200);
+        $sale($g3, 999); // never called
+
+        $d = Dashboard::where('name', CallgearPerformanceDashboardSeeder::NAME)->firstOrFail();
+        $w = $d->widgets()->where('type', 'agent_table')->firstOrFail();
+        $admin = User::where('email', 'admin@your-domain.com')->first() ?? User::first();
+        $data = $this->actingAs($admin)->getJson(route('dashboards.widget-data', [$d, $w]))->assertOk()->json();
+        $row = collect($data['rows'])->firstWhere('key', $a->id);
+        $this->assertSame([2, 500], [$row['clients'], (int) $row['client_sales']]);
+        $this->assertContains('clients', $data['clickable']);
+
+        // Clicking it lists those clients' sales.
+        $rec = $this->actingAs($admin)->getJson(route('dashboards.widget-records', [$d, $w]).'?field=employee&client_sales=1&key='.$a->id)->assertOk()->json();
+        $this->assertSame(2, $rec['total']);
+        $this->assertStringContainsString('500.00', $rec['note']);
+        $this->assertContains('Invoice', array_column($rec['columns'], 0));
+    }
 }

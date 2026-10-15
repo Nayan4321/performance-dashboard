@@ -238,7 +238,7 @@
             body.innerHTML = (data.note ? '<div class="small mb-2 fw-medium">' + esc(data.note) + '</div>' : '') + '<div class="d-flex justify-content-end mb-2 no-print"><button class="btn btn-sm btn-light export-csv"><i class="bi bi-download"></i> Excel (CSV)</button></div>' +
                 '<div class="table-responsive" style="max-height:520px"><table class="table table-sm table-hover mb-0"><thead class="sticky-top bg-body"><tr>' +
                 cols.map(([k, l, f]) => '<th role="button" data-k="' + k + '" class="text-nowrap ' + (f === 's' ? '' : 'text-end') + '">' + l + (sort[0] === k ? (sort[1] > 0 ? ' ▲' : ' ▼') : '') + '</th>').join('') +
-                '</tr></thead><tbody>' + (rows.length ? rows.map(r => '<tr data-row-key="' + esc(r.key ?? '') + '">' + cols.map(([k, , f]) => '<td class="' + (f === 's' ? (k === cols[0][0] ? 'fw-medium' : '') : 'text-end text-nowrap') + tone(k, r) + '">' + cell(r[k], f, k) + '</td>').join('') + '</tr>').join('')
+                '</tr></thead><tbody>' + (rows.length ? rows.map(r => '<tr data-row-key="' + esc(r.key ?? '') + '">' + cols.map(([k, , f]) => '<td data-k="' + k + '" class="' + (f === 's' ? (k === cols[0][0] ? 'fw-medium' : '') : 'text-end text-nowrap') + tone(k, r) + ((data.clickable || []).includes(k) ? ' text-primary text-decoration-underline' : '') + '">' + cell(r[k], f, k) + '</td>').join('') + '</tr>').join('')
                     : '<tr><td colspan="' + cols.length + '" class="text-center text-muted py-4">' + (type === 'agent_table' ? 'No agents yet. Tag employees on the Employees page, and calls appear once CallGear syncs.' : 'No data for these filters.') + '</td></tr>') + '</tbody></table></div>';
             body.querySelectorAll('th[data-k]').forEach(th => th.addEventListener('click', () => {
                 const col = cols.find(c => c[0] === th.dataset.k);
@@ -247,8 +247,15 @@
             }));
             body.querySelectorAll('tr[data-row-key]').forEach(tr => {
                 tr.style.cursor = 'pointer';
-                tr.addEventListener('click', () => openRecords(card, { field: type === 'branch_table' ? 'branch' : 'employee', key: tr.dataset.rowKey },
-                    tr.firstElementChild.textContent));
+                tr.addEventListener('click', e => {
+                    // "Clients attended" / "Sales from them": the sales of the clients on that agent's calls.
+                    const td = e.target.closest('td[data-k]');
+                    if (td && (data.clickable || []).includes(td.dataset.k)) {
+                        openRecords(card, { field: 'employee', key: tr.dataset.rowKey, client_sales: 1 }, tr.firstElementChild.textContent + ' · sales from clients attended');
+                        return;
+                    }
+                    openRecords(card, { field: type === 'branch_table' ? 'branch' : 'employee', key: tr.dataset.rowKey }, tr.firstElementChild.textContent);
+                });
             });
             body.querySelector('.export-csv').addEventListener('click', () => {
                 const q = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
