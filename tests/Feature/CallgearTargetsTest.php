@@ -153,7 +153,7 @@ class CallgearTargetsTest extends TestCase
         $sale($g3, 999); // never called
 
         $d = Dashboard::where('name', CallgearPerformanceDashboardSeeder::NAME)->firstOrFail();
-        $w = $d->widgets()->where('type', 'agent_table')->firstOrFail();
+        $w = $d->widgets()->where('type', 'agent_clients')->firstOrFail();
         $admin = User::where('email', 'admin@your-domain.com')->first() ?? User::first();
         $data = $this->actingAs($admin)->getJson(route('dashboards.widget-data', [$d, $w]))->assertOk()->json();
         $row = collect($data['rows'])->firstWhere('key', $a->id);

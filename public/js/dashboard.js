@@ -367,7 +367,7 @@
         card._data = data;
         const body = card.querySelector('.widget-body');
         // Revenue and commission widgets draw with the agent chart and table.
-        const id = card.dataset.widget, type = ['agent_revenue', 'agent_commission', 'agent_group_target', 'agent_tier_revenue'].includes(card.dataset.type) && data.type ? data.type : card.dataset.type, money = card.dataset.money === '1' ? true : (card.dataset.money === 'pct' ? 'pct' : false);
+        const id = card.dataset.widget, type = ['agent_revenue', 'agent_commission', 'agent_group_target', 'agent_tier_revenue', 'agent_clients'].includes(card.dataset.type) && data.type ? data.type : card.dataset.type, money = card.dataset.money === '1' ? true : (card.dataset.money === 'pct' ? 'pct' : false);
         if (data.error) { body.innerHTML = '<div class="text-danger small">' + esc(data.error) + '</div>'; return; }
         if (APEX.includes(type)) {
             if (typeof ApexCharts === 'undefined') { body.innerHTML = '<div class="text-danger small">Chart library failed to load.</div>'; return; }

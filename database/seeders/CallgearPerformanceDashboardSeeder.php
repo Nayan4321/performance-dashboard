@@ -48,6 +48,7 @@ class CallgearPerformanceDashboardSeeder extends Seeder
             ['Calls per day vs target (100)', 'agent_bars', 'count', null, null, 6, $targets + ['metric' => 'calls'], 'this_month'],
             ['Talk minutes per day vs target (120)', 'agent_bars', 'count', null, null, 6, $targets + ['metric' => 'talk'], 'this_month'],
             ['Agent scorecard (who is high or low)', 'agent_table', 'count', null, null, 12, $targets, 'this_month'],
+            [self::CLIENTS_SPEC['title'], 'agent_clients', 'count', null, null, 12, [], 'this_month'],
             ['Call results by tag', 'agent_tags', 'count', null, null, 12, [], 'this_month'],
             [self::BRANCH_SPEC['title'], 'hbar', 'count', null, 'branch', 12, self::BRANCH_SPEC['options'], 'this_month'],
             [self::REVENUE, 'agent_revenue', 'sum', 'net_amount', null, 12, self::REVENUE_SPEC['options'], 'this_month', 'sales'],
@@ -95,6 +96,9 @@ class CallgearPerformanceDashboardSeeder extends Seeder
     /** Calls per agent split by the result tag they put on them in CallGear. */
     private const TAGS_SPEC = ['title' => 'Call results by tag', 'type' => 'agent_tags', 'dataset' => 'calls', 'aggregate' => 'count', 'date_range' => 'this_month', 'width' => 12];
 
+    /** Different clients on each agent's calls, and what they bought (v77, Nayan 2026-10-15). */
+    public const CLIENTS_SPEC = ['title' => 'Clients attended', 'type' => 'agent_clients', 'dataset' => 'calls', 'aggregate' => 'count', 'date_range' => 'this_month', 'width' => 12];
+
     /** Calls per branch: the branch comes from the CallGear site, else the home branch of the client on the call. */
     public const BRANCH_SPEC = ['title' => 'Calls by branch', 'type' => 'hbar', 'dataset' => 'calls', 'aggregate' => 'count', 'group_by' => 'branch',
         'date_range' => 'this_month', 'width' => 12, 'options' => ['color' => 'info']];
@@ -116,8 +120,12 @@ class CallgearPerformanceDashboardSeeder extends Seeder
             self::TAGS_SPEC['title'] => fn (Dashboard $d) => $this->addAfter($d, 'Talk minutes per day vs target (120)', self::TAGS_SPEC),
             self::BRANCH_SPEC['title'] => fn (Dashboard $d) => $this->addAfter($d, self::TAGS_SPEC['title'], self::BRANCH_SPEC),
             // New widgets go here; they are added on the next update and never touched again.
+            self::CLIENTS_SPEC['title'] => fn (Dashboard $d) => $this->addAfter($d, 'Agent scorecard (who is high or low)', self::CLIENTS_SPEC),
         ];
     }
+
+    /** How many entries at the top of newWidgets() the live site already had at v75. */
+    private const ON_LIVE_AT_V75 = 7;
 
     /** Settings key listing the widgets already added to the existing dashboard. */
     public const ADDED_KEY = 'seeded.callgear_widgets';
@@ -126,11 +134,9 @@ class CallgearPerformanceDashboardSeeder extends Seeder
     {
         $added = json_decode((string) Setting::get(self::ADDED_KEY, ''), true);
         if (! is_array($added)) {
-            // First run of this logic (live site is on v75, which had every widget above): record them, add nothing,
-            // so widgets the client removed do not come back.
-            Setting::put(self::ADDED_KEY, json_encode(array_keys($this->newWidgets())));
-
-            return;
+            // First run of this logic: the live site already had the v75 widgets, so they count as added
+            // (widgets the client removed do not come back); only later ones are added.
+            $added = array_slice(array_keys($this->newWidgets()), 0, self::ON_LIVE_AT_V75);
         }
         foreach ($this->newWidgets() as $title => $add) {
             if (! in_array($title, $added, true)) {

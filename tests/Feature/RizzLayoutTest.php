@@ -447,12 +447,24 @@ class RizzLayoutTest extends TestCase
         $this->assertSame($before, $cg->widgets()->orderBy('position')->get(['id', 'title', 'type', 'options', 'position'])->toArray());
         $this->assertSame(['callgear-admin'], $tags->fresh()->option('roles'));
 
-        // A live site without the "already added" list (v75) records it on the first run and adds nothing.
+        // A live site without the "already added" list (v75) gets only widgets newer than v75, never a removed v75 one.
         \App\Models\Setting::put(\Database\Seeders\CallgearPerformanceDashboardSeeder::ADDED_KEY, null);
         $revenue->delete();
+        $cg->widgets()->where('title', 'Clients attended')->delete();
         $this->seed(\Database\Seeders\CallgearPerformanceDashboardSeeder::class);
         $this->assertFalse($cg->widgets()->where('title', 'Revenue')->exists());
+        $this->assertTrue($cg->widgets()->where('title', 'Clients attended')->exists());
         $this->assertNotNull(\App\Models\Setting::get(\Database\Seeders\CallgearPerformanceDashboardSeeder::ADDED_KEY));
+        // A widget new in a later version is added once, after the scorecard; deleting it keeps it gone.
+        $key = \Database\Seeders\CallgearPerformanceDashboardSeeder::ADDED_KEY;
+        \App\Models\Setting::put($key, json_encode(array_values(array_diff(json_decode(\App\Models\Setting::get($key), true), ['Clients attended']))));
+        $cg->widgets()->where('title', 'Clients attended')->delete();
+        $this->seed(\Database\Seeders\CallgearPerformanceDashboardSeeder::class);
+        $w = $cg->widgets()->orderBy('position')->pluck('title')->all();
+        $this->assertSame(array_search('Agent scorecard (who is high or low)', $w) + 1, array_search('Clients attended', $w));
+        $cg->widgets()->where('title', 'Clients attended')->delete();
+        $this->seed(\Database\Seeders\CallgearPerformanceDashboardSeeder::class);
+        $this->assertFalse($cg->widgets()->where('title', 'Clients attended')->exists());
 
         // Saving a widget in the editor keeps options the form has no field for, and its roles when no role boxes were shown.
         $booked = $cg->widgets()->where('title', \Database\Seeders\CallgearPerformanceDashboardSeeder::BOOKINGS)->sole();

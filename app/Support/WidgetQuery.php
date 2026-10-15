@@ -84,7 +84,7 @@ class WidgetQuery
         if ($widget->type === 'employee_table') {
             return $this->employeeTable($widget, $ds);
         }
-        if ($widget->type === 'agent_table' || $widget->type === 'agent_bars') {
+        if (in_array($widget->type, ['agent_table', 'agent_bars', 'agent_clients'], true)) {
             return $this->agentScores($widget, $ds);
         }
         if (in_array($widget->type, self::AGENT_REVENUE_TYPES, true)) {
@@ -211,7 +211,7 @@ class WidgetQuery
                 ->orWhere('calls.tags', 'like', "%, $t")->orWhere('calls.tags', 'like', "%,$t,%")->orWhere('calls.tags', 'like', "%, $t,%"));
         }
         $note = null;
-        if ($this->clientSales && $table === 'calls' && $widget->type === 'agent_table') {
+        if ($this->clientSales && $table === 'calls' && $widget->type === 'agent_clients') {
             $query = $this->clientSalesQuery($widget, $ds, $key);
             $ds = Datasets::get('sales');
             $table = 'sales';
@@ -380,7 +380,7 @@ class WidgetQuery
         $stats = $this->baseQuery($widget, $ds)->whereNotNull('calls.employee_id')
             ->selectRaw('calls.employee_id as e, COUNT(*) as c, SUM(calls.duration_seconds) as t')
             ->groupBy('calls.employee_id')->get()->keyBy('e');
-        [$clients, $clientSales] = $widget->type === 'agent_table' ? $this->clientsAttended($widget, $ds, $from, $to) : [collect(), collect()];
+        [$clients, $clientSales] = $widget->type === 'agent_clients' ? $this->clientsAttended($widget, $ds, $from, $to) : [collect(), collect()];
 
         $tags = $this->tagIds($widget);
         $allowed = $this->user->visibleBranchIds();
@@ -427,13 +427,26 @@ class WidgetQuery
         $meta = ['days' => $days, 'target_calls' => $targetCalls, 'target_minutes' => $targetMinutes,
             'counts' => ['High' => $rows->where('status', 'High')->count(), 'On track' => $rows->where('status', 'On track')->count(), 'Low' => $rows->where('status', 'Low')->count()]];
 
+        if ($widget->type === 'agent_clients') {
+            // "Clients attended": clients on each agent's calls and what they bought (click a number for the sales).
+            $list = $rows->map(fn ($r) => $r + ['per_client' => $r['clients'] ? round($r['client_sales'] / $r['clients'], 2) : null])
+                ->sortByDesc('client_sales')->values();
+
+            return [
+                'type' => 'agent_table',
+                'note' => 'Clients = different clients (phone matched in Zenoti) on the agent\'s calls. Sales = what those clients bought in the same period, ex VAT, any branch. Click a number to see the sales.',
+                'columns' => [['employee', 'Agent', 's'], ['branch', 'Branch', 's'], ['calls', 'Calls', 'n'], ['clients', 'Clients attended', 'n'],
+                    ['client_sales', 'Sales from them', 'm'], ['per_client', 'Sales per client', 'm']],
+                'sort' => 'client_sales',
+                'clickable' => ['clients', 'client_sales'],
+                'rows' => $list->all(),
+            ];
+        }
         if ($widget->type === 'agent_table') {
             return $meta + [
                 'type' => 'agent_table',
                 'columns' => [['employee', 'Agent', 's'], ['branch', 'Branch', 's'], ['calls', 'Calls', 'n'], ['calls_day', 'Calls / day', 'n'], ['calls_pct', '% of '.(float) $targetCalls.' calls', 'p'],
-                    ['talk_min', 'Talk min', 'n'], ['talk_day', 'Talk min / day', 'n'], ['talk_pct', '% of '.(float) $targetMinutes.' min', 'p'],
-                    ['clients', 'Clients attended', 'n'], ['client_sales', 'Sales from them', 'm'], ['achievement', 'Score %', 'p'], ['status', 'Status', 's']],
-                'clickable' => ['clients', 'client_sales'],
+                    ['talk_min', 'Talk min', 'n'], ['talk_day', 'Talk min / day', 'n'], ['talk_pct', '% of '.(float) $targetMinutes.' min', 'p'], ['achievement', 'Score %', 'p'], ['status', 'Status', 's']],
                 'sort' => 'achievement',
                 'rows' => $rows->all(),
             ];
