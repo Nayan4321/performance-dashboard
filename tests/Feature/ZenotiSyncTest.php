@@ -730,4 +730,22 @@ class ZenotiSyncTest extends TestCase
         $this->artisan('integrations:sync zenoti --entity=appointments')->assertSuccessful();
         $this->assertEquals(4, Appointment::count());
     }
+
+    public function test_server_auto_sync_runs_call_agents_data_first_without_anyone_on_the_site(): void
+    {
+        Http::fake(['*' => Http::response([], 200)]);
+        \App\Models\Tag::idsFor([\App\Models\Tag::AGENTS]);
+        $this->artisan('integrations:auto-sync')->assertSuccessful();
+
+        $steps = array_map(fn ($l) => strtok($l, ':'), \App\Console\Commands\AutoSyncAll::lastRun()['steps']);
+        $names = array_column(\App\Console\Commands\AutoSyncAll::steps(), 0);
+        $firstOther = array_search("Other clients' profiles", $names);
+        foreach (array_slice($names, 0, $firstOther) as $n) {
+            $this->assertStringStartsWith('Call agents', $n);
+        }
+        $this->assertSame('Call agents', $steps[0]);
+        // Scheduled every 5 minutes by the server's cron.
+        $events = collect(app(\Illuminate\Console\Scheduling\Schedule::class)->events())->map(fn ($e) => $e->command.' '.$e->expression);
+        $this->assertTrue($events->contains(fn ($c) => str_contains($c, 'integrations:auto-sync') && str_ends_with($c, '*/5 * * * *')));
+    }
 }

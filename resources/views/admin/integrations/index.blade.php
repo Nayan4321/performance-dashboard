@@ -63,7 +63,12 @@
 <div class="card mb-3"><div class="card-body py-2 small">
     <strong>Automatic sync:</strong>
     @if($heartbeat && $heartbeat->gt(now()->subMinutes(5)))
-        <span class="text-success">on (cron)</span>, last run {{ $heartbeat->diffForHumans() }}.
+        <span class="text-success">on (server cron)</span>, runs every 5 minutes even when nobody has the site open: Call agents' data first, then the rest.
+        @php $lastAuto = \App\Console\Commands\AutoSyncAll::lastRun(); @endphp
+        @if($lastAuto)
+            <details class="mt-1"><summary>Last full run finished {{ \Illuminate\Support\Carbon::parse($lastAuto['finished'])->diffForHumans() }}</summary>
+                <ul class="mb-0">@foreach($lastAuto['steps'] as $step)<li class="{{ str_contains($step, 'FAILED') ? 'text-danger' : '' }}">{{ $step }}</li>@endforeach</ul></details>
+        @endif
     @elseif($autoSync['last'] && $autoSync['last']->gt(now()->subMinutes(15)))
         <span class="text-success">on</span>, last run {{ $autoSync['last']->diffForHumans() }}. CallGear and Zenoti appointments / sales every 5 minutes.
     @else

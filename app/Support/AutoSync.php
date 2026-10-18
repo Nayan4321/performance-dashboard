@@ -17,7 +17,6 @@ class AutoSync
 
     /** job => [artisan command, arguments, seconds between runs] */
     private const JOBS = [
-        'callgear' => ['integrations:sync', ['provider' => 'callgear'], 300],
         'appointments' => ['integrations:sync', ['provider' => 'zenoti', '--entity' => 'appointments'], 300],
         'guests' => ['integrations:sync', ['provider' => 'zenoti', '--entity' => 'guests'], 900],
         'leads' => ['integrations:sync', ['provider' => 'zenoti', '--entity' => 'leads'], 900],
@@ -86,8 +85,16 @@ class AutoSync
             Cache::forever(self::LAST_TICK, now()->toIso8601String());
             // The host stops long web requests, so guest profiles go in short rounds here too.
             config(['zenoti.guest_details_seconds' => min((int) config('zenoti.guest_details_seconds'), (int) config('zenoti.web_guest_seconds', 90))]);
-            // Sales first, one branch per tick, so revenue never waits behind a long guest backfill
+            // Call agents' data first (Nayan): their calls, then sales one branch per tick, so revenue never waits behind a long guest backfill
             // and a host time limit can't keep cutting the sync off before the same branches.
+            if (Cache::add('autosync.job.callgear', true, 270)) {
+                try {
+                    Artisan::call('integrations:sync', ['provider' => 'callgear']);
+                    $ran[] = 'callgear';
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
             if (Cache::add('autosync.job.sales_branch', true, 60)) {
                 try {
                     self::salesRound();

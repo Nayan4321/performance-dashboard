@@ -1,30 +1,17 @@
 <?php
 
-use App\Models\SyncRequest;
 use Illuminate\Support\Facades\Schedule;
 
 /*
-| Hostinger: add ONE cron job in hPanel (Advanced > Cron Jobs), every minute:
-|   cd /home/USER/domains/YOUR-DOMAIN/app && php artisan schedule:run >> /dev/null 2>&1
+| Hostinger: add ONE cron job in hPanel (Advanced > Cron Jobs), every minute. Admin > Integrations shows the
+| exact command for this server (it needs the PHP 8.3 binary, e.g. /opt/alt/php83/usr/bin/php):
+|   cd /home/USER/domains/YOUR-DOMAIN/public_html/dashboard && /opt/alt/php83/usr/bin/php artisan schedule:run >> storage/logs/cron.log 2>&1
 | Webhooks give near-instant updates; these runs catch anything a webhook missed.
 */
-// "Sync now" clicks from Admin › Integrations; runs in the background so the browser doesn't time out.
 // Heartbeat for the "cron isn't running" check on Admin › Integrations.
 Schedule::call(fn () => \App\Console\Commands\RunSyncRequests::beat())->everyMinute()->name('scheduler-heartbeat');
+// Automatic sync on the server, every 5 minutes, whether or not anyone has the site open:
+// the Call agents' data first, then everything else (see AutoSyncAll for the order and intervals).
+Schedule::command('integrations:auto-sync')->everyFiveMinutes()->withoutOverlapping(180);
+// "Sync now" clicks from Admin › Integrations; runs in the background so the browser doesn't time out.
 Schedule::command('integrations:run-requests')->everyMinute()->withoutOverlapping(240);
-Schedule::command('integrations:sync zenoti --entity=appointments')->everyFiveMinutes()->withoutOverlapping(30)
-    ->skip(fn () => SyncRequest::where('status', 'running')->exists());
-// Only a running sales "Sync now" holds this back; a long guest backfill must not starve revenue.
-Schedule::command('integrations:sync zenoti --entity=sales')->everyFiveMinutes()->withoutOverlapping(30)
-    ->skip(fn () => SyncRequest::where('status', 'running')->where(fn ($q) => $q->whereNull('entity')->orWhere('entity', 'sales'))->exists());
-// Invoices close days after the sale (and closing decides what counts), so re-read two weeks every few hours.
-Schedule::command('integrations:sync zenoti --entity=sales --days=14')->everyThreeHours()->withoutOverlapping(120);
-Schedule::command('integrations:sync zenoti --entity=guests')->everyFifteenMinutes()->withoutOverlapping(30)
-    ->skip(fn () => SyncRequest::where('status', 'running')->exists());
-Schedule::command('integrations:sync zenoti --entity=leads')->everyFifteenMinutes()->withoutOverlapping(30)
-    ->skip(fn () => SyncRequest::where('status', 'running')->exists());
-Schedule::command('integrations:sync zenoti --entity=employees')->hourly()->withoutOverlapping(60)
-    ->skip(fn () => SyncRequest::where('status', 'running')->exists());
-Schedule::command('integrations:sync zenoti --entity=centers')->daily()->withoutOverlapping(60)
-    ->skip(fn () => SyncRequest::where('status', 'running')->exists());
-Schedule::command('integrations:sync callgear')->everyFiveMinutes()->withoutOverlapping(30);
