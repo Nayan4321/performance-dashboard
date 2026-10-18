@@ -5,7 +5,8 @@ use Illuminate\Support\Facades\Schedule;
 /*
 | Hostinger: add ONE cron job in hPanel (Advanced > Cron Jobs), every minute. Admin > Integrations shows the
 | exact command for this server (it needs the PHP 8.3 binary, e.g. /opt/alt/php83/usr/bin/php):
-|   cd /home/USER/domains/YOUR-DOMAIN/public_html/dashboard && /opt/alt/php83/usr/bin/php artisan schedule:run >> storage/logs/cron.log 2>&1
+|   /opt/alt/php83/usr/bin/php /home/USER/domains/YOUR-DOMAIN/public_html/dashboard/artisan schedule:run
+| (no "cd ... &&" or ">> log": that form never ran on Hostinger; hPanel shows the output instead)
 | Webhooks give near-instant updates; these runs catch anything a webhook missed.
 */
 // Heartbeat for the "cron isn't running" check on Admin › Integrations.

@@ -48,7 +48,7 @@ class IntegrationController extends Controller
             'callStats' => ['total' => \App\Models\Call::count(), 'last' => \App\Models\Call::max('started_at'), 'incoming_events' => WebhookEvent::where('provider', 'callgear')->count(), 'last_event' => WebhookEvent::where('provider', 'callgear')->max('created_at')],
             'heartbeat' => RunSyncRequests::lastBeat(),
             'autoSync' => ['last' => \App\Support\AutoSync::lastTick(), 'url' => route('autosync.run', ['token' => \App\Support\AutoSync::token()])],
-            'cronCommand' => 'cd '.base_path().' && '.$this->cliPhp().' artisan schedule:run >> storage/logs/cron.log 2>&1',
+            'cronCommand' => $this->cliPhp().' '.base_path('artisan').' schedule:run', // no cd or >>: that form never ran on Hostinger
             'range' => [Appointment::min('start_time'), Appointment::max('start_time')],
             'cronLog' => $this->tail(storage_path('logs/cron.log'), 15),
             'lastError' => $this->lastError(),

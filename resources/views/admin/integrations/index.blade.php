@@ -86,8 +86,7 @@
         "Sync now" and the automatic syncs need it. In hPanel › Advanced › Cron Jobs add a job that runs <strong>every minute</strong> with this command:
         <div class="mt-1"><code class="user-select-all">{{ $cronCommand }}</code></div>
         <div class="mt-1 text-muted">Until then you can run a sync over SSH: <code>php artisan integrations:sync zenoti --days=90</code></div>
-        <div class="mt-2">If the job is already set up, it is failing. What it last wrote (<code>storage/logs/cron.log</code>):</div>
-        <pre class="bg-white border rounded p-2 mb-1 small text-break" style="white-space:pre-wrap;max-height:220px;overflow:auto">{{ $cronLog ?? 'Nothing: the log file does not exist, so the cron job has never run this command. Check the command and that it is set to every minute.' }}</pre>
+        <div class="mt-2">If the job is already set up, it is failing: open it in hPanel › Cron Jobs and click "View output" to see why.</div>
         @if($lastError)<div class="mt-1">Latest app error: <code class="text-break">{{ $lastError }}</code></div>@endif
         <div class="mt-1">Storage folder:
             @if($storage['writable'])<strong class="text-success">writable</strong>@else<strong class="text-danger">NOT writable</strong> <code>{{ $storage['error'] }}</code>@endif
