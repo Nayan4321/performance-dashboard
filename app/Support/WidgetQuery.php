@@ -680,6 +680,9 @@ class WidgetQuery
             'to_next' => $next ? round($next[0] - $total, 2) : null,
             'commission' => round($total * ($tier[1] ?? 0) / 100, 2),
             'pct_of_top' => $top > 0 ? round($total / $top * 100, 1) : null,
+            // % of the target reached so far (the first tier, 700k), e.g. 200k of 700k = 28.6% (client, 2026-10-19).
+            'target' => $tiers ? $tiers[0][0] : null,
+            'pct_of_target' => $tiers && $tiers[0][0] > 0 ? round($total / $tiers[0][0] * 100, 1) : null,
             'projected' => $projected,
             'projected_rate' => $projected !== null ? (collect($tiers)->filter(fn ($t) => $projected >= $t[0])->last()[1] ?? 0.0) : null,
             'labels' => $labels,

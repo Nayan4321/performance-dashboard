@@ -161,19 +161,21 @@
                 '<div class="fs-18 fw-bold' + (tone ? ' text-' + tone : '') + '">' + value + '</div><div class="small text-muted">' + sub + '</div></div></div>';
             const reached = data.tier !== null && data.tier !== undefined;
             let html = '<div class="row g-2 mb-3">' +
-                box('Achieved by the group', aed(total), (data.agents || 0) + ' agents · ' + esc(card.dataset.range || ''), '') +
+                box('Achieved by the group', aed(total) + (data.pct_of_target !== null && data.pct_of_target !== undefined ? ' <span class="fs-14 text-' + (data.pct_of_target >= 100 ? 'success' : 'primary') + '">(' + fmt(data.pct_of_target) + '%)</span>' : ''),
+                    (data.pct_of_target !== null && data.pct_of_target !== undefined ? fmt(data.pct_of_target) + '% of the ' + fmt(data.target / 1000) + 'k target · ' : '') + (data.agents || 0) + ' agents · ' + esc(card.dataset.range || ''), '') +
                 box('Commission now', reached ? aed(data.commission) : '0 AED', reached ? 'For the group: ' + data.rate + '% of ' + aed(total) : 'First tier at ' + aed(tiers.length ? tiers[0][0] : 0), reached ? 'success' : 'danger') +
                 box('Next tier', data.next ? aed(data.next) : 'Top tier reached', data.next ? 'Pays ' + data.next_rate + '% = ' + aed(data.next * data.next_rate / 100) + ' at that point' : 'Highest rate ' + data.rate + '%', 'primary') +
                 box(data.next ? 'Still to achieve' : 'Above top tier', data.next ? aed(data.to_next) : aed(total - top),
                     data.projected !== null && data.projected !== undefined ? 'At this pace: ' + aed(data.projected) + ' by month end (' + data.projected_rate + '%)' : '', data.next ? 'warning' : 'success') +
                 '</div>';
-            html += '<div class="position-relative mb-5 mx-1" style="height:22px"><div class="progress h-100" role="progressbar" aria-valuenow="' + Math.round(at(total)) + '" aria-valuemin="0" aria-valuemax="100">' +
-                '<div class="progress-bar bg-' + (reached ? 'success' : 'warning') + '" style="width:' + at(total) + '%">' + (at(total) > 12 ? aed(total) : '') + '</div></div>';
+            html += '<div class="position-relative mx-1" style="height:22px;margin-bottom:4.5rem"><div class="progress h-100" role="progressbar" aria-valuenow="' + Math.round(at(total)) + '" aria-valuemin="0" aria-valuemax="100">' +
+                '<div class="progress-bar bg-' + (reached ? 'success' : 'warning') + '" style="width:' + at(total) + '%">' + (at(total) > 12 ? aed(total) + (data.pct_of_target !== null && data.pct_of_target !== undefined ? ' · ' + fmt(data.pct_of_target) + '%' : '') : '') + '</div></div>';
             tiers.forEach(t => {
                 const ok = total >= t[0];
                 html += '<div class="position-absolute top-0 h-100" style="left:' + at(t[0]) + '%;border-left:2px dashed ' + (ok ? colorOf('success') : INK) + '"></div>' +
                     '<div class="position-absolute small text-center" style="left:' + at(t[0]) + '%;top:26px;transform:translateX(-50%);white-space:nowrap;line-height:1.2">' +
-                    '<span class="fw-semibold' + (ok ? ' text-success' : '') + '">' + (ok ? '✓ ' : '') + t[1] + '% of ' + fmt(t[0] / 1000) + 'k</span><br><span class="text-muted">= ' + aed(t[0] * t[1] / 100) + '</span></div>';
+                    '<span class="fw-semibold' + (ok ? ' text-success' : '') + '">' + (ok ? '✓ ' : '') + t[1] + '% of ' + fmt(t[0] / 1000) + 'k</span><br><span class="text-muted">= ' + aed(t[0] * t[1] / 100) + '</span>' +
+                    '<br><span class="' + (ok ? 'text-success' : 'text-muted') + '">' + fmt(Math.round(total / t[0] * 1000) / 10) + '% reached</span></div>';
             });
             html += '</div><div class="small text-muted">Running total this period · dashed lines are the tiers (' + tiers.map(t => fmt(t[0] / 1000) + 'k = ' + t[1] + '%').join(', ') + ')</div><div class="apex-box"></div>';
             body.innerHTML = html;

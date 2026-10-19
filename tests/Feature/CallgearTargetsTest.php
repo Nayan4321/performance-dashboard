@@ -96,6 +96,7 @@ class CallgearTargetsTest extends TestCase
         $group = $get('Group target and commission');
         $this->assertSame('group_target', $group['type']);
         $this->assertEquals(900000, $group['total']);
+        $this->assertEquals([700000, 128.6], [$group['target'], $group['pct_of_target']]); // % of the 700k target reached
         $this->assertEquals(0.6, $group['rate']);
         $this->assertEquals(1000000, $group['next']);
         $this->assertEquals(0.7, $group['next_rate']);
